@@ -25,6 +25,8 @@ import {
   type FormEvent,
 } from 'react'
 import { BabylonViewport } from './BabylonViewport'
+import { FloorPlanImportWorkbench } from './FloorPlanImportWorkbench'
+import './floorplan-import.css'
 
 type Health = {
   ok: boolean
@@ -399,11 +401,11 @@ export function App() {
   return (
     <main className="shell">
       <header className="hero">
-        <div className="eyebrow">HOMESCAPE AI · AI DECISION RUNTIME</div>
-        <h1>现在，用户真的可以用一句话修改这个家。</h1>
+        <div className="eyebrow">HOMESCAPE AI · REAL ROOM PIPELINE</div>
+        <h1>从真实户型开始，再用一句话持续修改这个家。</h1>
         <p>
-          PR #6 把自然语言接入 AI Capability Runtime。JEV 只负责快速的 typed decision，
-          代码把结果组合成受限 DesignOperation；真正的商品选择、碰撞与空间执行仍由 Planner 决定。
+          PR #7 增加真实户型 Candidate + Human Review 链路，并保留既有自然语言设计能力。
+          户型解析结果和 AI 决策都不能直接成为真值，必须经过校验、确认与确定性执行。
         </p>
         <div className="status-row">
           <span className={health?.ok ? 'dot dot-online' : 'dot'} />
@@ -413,10 +415,12 @@ export function App() {
       </header>
 
       <section className="flow" aria-label="Core flow">
-        <span>Natural Language</span><b>→</b><span>JEV Typed Decision</span><b>→</b>
-        <span>DesignOperation[]</span><b>→</b><span>Planner</span><b>→</b>
+        <span>Real Floor Plan</span><b>→</b><span>HomeSpatialModel</span><b>→</b>
+        <span>Natural Language</span><b>→</b><span>Planner</span><b>→</b>
         <span>Revision</span><b>→</b><span>Realtime 3D</span>
       </section>
+
+      <FloorPlanImportWorkbench />
 
       <section className="command-section">
         <div>
@@ -700,7 +704,7 @@ export function App() {
         </article>
       </section>
 
-      <footer>PR #6 · AI Runtime / JEV Decision · 下一步：Real Floor Plan Import</footer>
+      <footer>PR #7 · Real Floor Plan Import · 下一步：Finalized Model → Real Room Workbench</footer>
     </main>
   )
 }

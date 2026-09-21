@@ -75,9 +75,11 @@ TYPESAFE_MODEL=jev-latest
 
 ## 当前阶段
 
-已完成 Foundation、HomeSpatialModel、参数化 3D、Design State / Revision、Catalog / Planner，以及基础自然语言 Decision Runtime。
+已完成 Foundation、HomeSpatialModel、参数化 3D、Design State / Revision、Catalog / Planner、自然语言 Decision Runtime，以及 Real Floor Plan Candidate + Human Review 基础链路。
 
-下一阶段：Real Floor Plan Import。
+当前户型输入采用 FloorPlanDraft 过渡协议：像素坐标 + 标尺 + Room Polygon + Opening + confidence，经 Importer 转成 HomeSpatialModel Candidate，再经过人工确认与统一 Validation 才能 Finalize。
+
+下一阶段：把 Finalized HomeSpatialModel 接入现有 DesignState / Planner / 3D Workbench。
 
 目标闭环：
 

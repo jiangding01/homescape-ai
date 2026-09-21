@@ -1,0 +1,237 @@
+.floorplan-import-section {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.42fr) minmax(0, 1fr);
+  gap: 36px;
+  padding: 18px 0 64px;
+}
+
+.floorplan-import-copy h2 {
+  margin: 10px 0 12px;
+  font-size: 30px;
+  letter-spacing: -0.03em;
+}
+
+.floorplan-import-copy > p {
+  margin: 0;
+  color: #6b6c61;
+  line-height: 1.75;
+}
+
+.floorplan-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.floorplan-import-actions button,
+.floorplan-file-button,
+.floorplan-review-item button,
+.floorplan-finalize-row button {
+  min-height: 36px;
+  border: 1px solid #bdb6aa;
+  padding: 8px 11px;
+  background: #f5f1e9;
+  color: #34362e;
+  cursor: pointer;
+}
+
+.floorplan-file-button {
+  display: inline-flex;
+  align-items: center;
+}
+
+.floorplan-file-button input {
+  display: none;
+}
+
+.floorplan-contract-note {
+  display: grid;
+  gap: 7px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid #cfcbc1;
+  color: #74756a;
+  font-size: 11px;
+}
+
+.floorplan-contract-note strong {
+  color: #2d2f28;
+  font-size: 12px;
+}
+
+.floorplan-import-workbench {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #c8c2b6;
+  background: #e7e2d8;
+}
+
+.floorplan-empty {
+  min-height: 360px;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  text-align: center;
+  color: #77786d;
+}
+
+.floorplan-empty strong {
+  color: #2d2f28;
+}
+
+.floorplan-import-status {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid #c8c2b6;
+  border-left: 1px solid #c8c2b6;
+}
+
+.floorplan-import-status > div {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border-right: 1px solid #c8c2b6;
+  border-bottom: 1px solid #c8c2b6;
+}
+
+.floorplan-import-status span {
+  color: #7d7d71;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.floorplan-import-status strong {
+  font-size: 13px;
+}
+
+.floorplan-candidate-canvas {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  margin-top: 12px;
+  background: #f8f5ee;
+}
+
+.floorplan-candidate-room {
+  fill: #ebe7de;
+  stroke: #bdb6aa;
+  stroke-width: 1;
+}
+
+.floorplan-candidate-wall {
+  stroke: #272920;
+  stroke-width: 7;
+  stroke-linecap: square;
+}
+
+.floorplan-candidate-label {
+  fill: #5d5f54;
+  font-size: 14px;
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
+.floorplan-review-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.floorplan-review-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #c7c0b4;
+  background: rgba(248, 245, 238, 0.68);
+}
+
+.floorplan-review-item strong {
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.floorplan-review-item p {
+  margin: 5px 0;
+  color: #66685d;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.floorplan-review-action {
+  display: flex;
+  gap: 6px;
+}
+
+.floorplan-review-action select {
+  border: 1px solid #bdb6aa;
+  background: #fbf8f1;
+  color: #34362e;
+  padding: 7px;
+}
+
+.floorplan-review-done {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid #afbaa8;
+  background: rgba(244, 248, 241, 0.7);
+  color: #5a6a55;
+}
+
+.floorplan-finalize-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #c8c2b6;
+  color: #6d6e63;
+  font-size: 11px;
+}
+
+.floorplan-finalize-row button {
+  background: #1f211b;
+  color: #f5f2eb;
+  border-color: #1f211b;
+}
+
+.floorplan-import-error {
+  margin-top: 12px;
+  padding: 11px;
+  border: 1px solid #c7a99f;
+  background: rgba(248, 245, 238, 0.76);
+  color: #914b3d;
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .floorplan-import-section {
+    grid-template-columns: 1fr;
+  }
+
+  .floorplan-import-status {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .floorplan-review-item {
+    grid-template-columns: 1fr;
+  }
+
+  .floorplan-review-action {
+    align-items: stretch;
+  }
+
+  .floorplan-finalize-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
