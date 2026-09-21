@@ -1,4 +1,4 @@
-# HomeScape AI Architecture v0.3
+# HomeScape AI Architecture v0.4
 
 ## 1. 产品目标
 
@@ -21,87 +21,130 @@ Design Request + Scope
         │
         ▼
 AI Capability Runtime
-Intent / Decision / Vision / Retrieval
         │
         ▼
 DesignOperation[]
         │
         ▼
-Schema + Authorization + Domain Validation
+Catalog + Planner + Constraint
         │
         ▼
-Catalog Retrieval
+ResolvedDesignMutation[]
         │
         ▼
-Planner + Constraint Engine
+Revision Engine
         │
         ▼
-Design Revision
-        │
-        ▼
-Resolved Domain State
+DesignState
         │
         ├──────────► RenderSnapshot ──► Interactive Renderer
         │
-        └──────────► Hi-Fi Render / Business Runtime
+        └──────────► Quote / Hi-Fi Render / Business Runtime
 ~~~
 
-## 3. HomeSpatialModel
+## 3. 双层 Source of Truth
 
-HomeSpatialModel 是住宅空间 Source of Truth，与 AI Provider 和 3D Engine 无关。
+### HomeSpatialModel
+
+住宅本体真值：
+
+- Floor / Room / Zone
+- Wall / Opening
+- Column / Beam
+- UtilityAnchor
+- RoomConnection
+- provenance / confidence
+
+Canonical：meter、right-handed、Y-up。
+
+### DesignState
+
+设计叠加真值：
+
+- DesignObject
+- MaterialAssignment
+- StyleIntent
+- Lock
+- headRevisionId
+- state version
+
+住宅几何与设计方案不混在一个 Scene JSON 中。
+
+## 4. Operation、Mutation 与 Revision
+
+DesignOperation 表达用户 / AI 的语义意图，例如：
 
 ~~~text
-HomeSpatialModel
-└── Floor
-    ├── Room
-    │   └── Zone
-    ├── Wall
-    ├── Opening
-    ├── StructuralElement
-    │   ├── Column
-    │   └── Beam
-    ├── UtilityAnchor
-    └── RoomConnection
+replace sofa
+move object
+preserve tv cabinet
+lock object
 ~~~
 
-Canonical 约定：
-
-- unit：meter
-- coordinate：right-handed
-- up axis：+Y
-- Floor.elevation 表达楼层高度
-- RoomConnection 表达空间拓扑
-- provenance / confidence 记录户型来源可靠度
-
-无法确定的尺寸、墙体、门窗或房间类型进入 unresolved issue，不允许 AI 猜测后直接成为几何真值。
-
-## 4. Design State 与 Revision
-
-Design State 包含叠加在 HomeSpatialModel 上的家具、材质、灯光、设计语言和锁定状态。
-
-所有 AI 和人工编辑统一转成 DesignOperation，再由 Domain / Planner 形成新的权威状态。Revision 是 Undo / Redo / Replay / Compare / Audit 的基础。
-
-## 5. AI 边界
-
-业务依赖 Capability，不依赖 Vendor。typed_decision 当前以 JEV 为 primary，但 JEV 不进入 Domain Contract。
-
-AI 只能产生受限 Domain Operation 或候选结果；正式空间变化必须经过 Schema、Domain 和 Planner 校验。
-
-## 6. Scope Model
+ResolvedDesignMutation 是经过 Catalog / Planner / Constraint 后可以确定执行的状态变化，例如：
 
 ~~~text
-Project
-└── Floor
-    └── Room
-        └── Zone
-            └── Object
+upsert_object
+move_object
+rotate_object
+set_material
+set_style_intent
+set_lock
 ~~~
 
-Scope 是 AI 请求的一等数据，Lock / Preserve 高于 AI 建议。
+Revision 同时保存 Operation 和 Mutation，使系统既能解释“用户想做什么”，也能审计“系统实际做了什么”。
 
-## 7. Planner
+Commit 时自动生成 inverseMutations：
 
-P1 使用 Rule + Anchor + Collision + Scoring：
+~~~text
+Revision
+├── operations
+├── mutations
+└── inverseMutations
+~~~
+
+因此 Undo / Redo / Replay 使用 Domain Engine，而不是依赖 React / Zustand 快照。
+
+## 5. Revision 并发模型
+
+客户端提交 RevisionDraft 时携带 expectedParentRevisionId。
+
+~~~text
+client expected head == server current head
+          │
+     yes ─┴─ no
+      │      │
+    commit  conflict
+~~~
+
+这为未来 AI 长任务、多人设计和异步 Planner 留出乐观并发控制。
+
+## 6. Lock / Preserve
+
+- Lock：持久化到 DesignState，阻止后续修改。
+- Preserve：只约束当前请求，不永久锁定。
+
+用户说“电视柜先别动”和“以后别动这个电视柜”因此是两种不同领域语义。
+
+## 7. Renderer
+
+Renderer 不依赖 Planner，不解释 Revision。
+
+~~~text
+HomeSpatialModel + DesignState
+             ↓
+    createRenderSnapshot()
+             ↓
+        RenderSnapshot
+             ↓
+       Renderer Adapter
+~~~
+
+Babylon.js 是当前 P1 Adapter，最终 Runtime 仍需 Whole-home Benchmark。
+
+## 8. Planner
+
+下一阶段将建立 Catalog + Planner：
 
 ~~~text
 DesignOperation
@@ -110,38 +153,19 @@ Catalog Candidate
       ↓
 Anchor Generation
       ↓
-Candidate Placement
-      ↓
 Hard Constraint Filter
       ↓
 Scoring / Ranking
       ↓
-Geometry Refinement
-      ↓
-Final Validation
+ResolvedDesignMutation
 ~~~
 
-复杂度达到门槛后再评估 CP-SAT。
+P1 先使用 Rule + Anchor + Collision + Scoring，复杂度达到门槛后再评估 CP-SAT。
 
-## 8. Renderer
+## 9. AI 边界
 
-Renderer 不拥有业务状态，不解释 DesignRevision，只消费 RenderSnapshot。
+业务依赖 Capability，不依赖 Vendor。JEV 可作为 typed_decision primary，但不能直接写 DesignState。
 
-~~~text
-HomeSpatialModel + PlannedObjects
-             ↓
-       RenderSnapshot
-             ↓
-      Renderer Adapter
-        ┌────┴────┐
-        │         │
-     Babylon   Future Runtime
-~~~
-
-PR #3 使用 Babylon.js 9 作为首个 P1 Adapter，提供参数化墙体、开口、梁柱、地面、Camera Focus 和实时交互。
-
-最终 3D Runtime 仍需通过 Whole-home Runtime Benchmark 后锁定。
-
-## 9. 后续基础设施
+## 10. 后续基础设施
 
 按需求逐步引入 PostgreSQL、Object Storage/CDN、Redis、Durable Workflow、OpenTelemetry 与 Yjs；均不阻塞首个 Vertical Slice。

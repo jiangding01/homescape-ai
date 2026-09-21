@@ -1,11 +1,22 @@
 import {
+  commitToTimeline,
+  createInitialDesignState,
+  createRevisionTimeline,
+  redoTimeline,
+  undoTimeline,
+  type DesignOperation,
+  type DesignRevisionDraft,
+  type ResolvedDesignMutation,
+} from '@homescape/domain'
+import { createRenderSnapshot } from '@homescape/renderer-contract'
+import {
   buildRoomGraph,
   polygonCenter,
   sampleApartment,
   validateHomeSpatialModel,
   type Vec2,
 } from '@homescape/spatial-model'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BabylonViewport } from './BabylonViewport'
 
 type Health = {
@@ -16,6 +27,29 @@ type Health = {
 
 type SpatialView = '3d' | '2d'
 
+const demoObjectId = 'object-demo-sofa'
+
+const initialDesignState = createInitialDesignState({
+  projectId: 'project-sample-001',
+  spatialModelId: sampleApartment.id,
+  objects: [
+    {
+      id: demoObjectId,
+      assetId: 'fixture-sofa',
+      category: 'sofa',
+      roomId: 'room-living',
+      transform: {
+        position: [2.1, 0, 2.7] as const,
+        yaw: 0,
+      },
+      dimensions: [2.2, 0.85, 0.95] as const,
+      provenance: {
+        source: 'system',
+      },
+    },
+  ],
+})
+
 function projectPoint(point: Vec2, minX: number, maxZ: number, scale: number) {
   return [(point[0] - minX) * scale, (maxZ - point[1]) * scale] as const
 }
@@ -23,6 +57,10 @@ function projectPoint(point: Vec2, minX: number, maxZ: number, scale: number) {
 export function App() {
   const [health, setHealth] = useState<Health | null>(null)
   const [view, setView] = useState<SpatialView>('3d')
+  const [timeline, setTimeline] = useState(() =>
+    createRevisionTimeline(initialDesignState),
+  )
+  const revisionSequence = useRef(1)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -36,6 +74,10 @@ export function App() {
   }, [])
 
   const validation = useMemo(() => validateHomeSpatialModel(sampleApartment), [])
+  const renderSnapshot = useMemo(
+    () => createRenderSnapshot(sampleApartment, timeline.state),
+    [timeline.state],
+  )
   const floor = sampleApartment.floors[0]
 
   if (!floor) {
@@ -53,14 +95,142 @@ export function App() {
   const scale = 84
   const canvasWidth = (maxX - minX) * scale
   const canvasHeight = (maxZ - minZ) * scale
+  const sofaLocked = Boolean(timeline.state.locks[demoObjectId])
+
+  const commitDemoRevision = (
+    request: string,
+    operation: DesignOperation,
+    mutation: ResolvedDesignMutation,
+  ) => {
+    setTimeline((current) => {
+      const revisionId = 'revision-demo-' + revisionSequence.current
+      revisionSequence.current += 1
+
+      const draft: DesignRevisionDraft = {
+        id: revisionId,
+        projectId: current.state.projectId,
+        expectedParentRevisionId: current.state.headRevisionId ?? null,
+        request,
+        operations: [operation],
+        mutations: [mutation],
+        provenance: {
+          actor: 'user',
+          schemaVersion: '0.1.0',
+        },
+        createdAt: new Date().toISOString(),
+      }
+
+      return commitToTimeline(current, draft).timeline
+    })
+  }
+
+  const moveDemoSofa = () => {
+    const sofa = timeline.state.objects[demoObjectId]
+
+    if (!sofa || sofaLocked) return
+
+    const position = [
+      sofa.transform.position[0] + 0.4,
+      sofa.transform.position[1],
+      sofa.transform.position[2],
+    ] as const
+    const operationId = 'operation-demo-' + revisionSequence.current
+
+    commitDemoRevision(
+      '将客厅沙发向右移动 0.4 米',
+      {
+        id: operationId,
+        type: 'move_object',
+        source: 'user',
+        scope: {
+          type: 'object',
+          objectId: demoObjectId,
+        },
+        objectId: demoObjectId,
+        position,
+      },
+      {
+        type: 'move_object',
+        objectId: demoObjectId,
+        position,
+      },
+    )
+  }
+
+  const rotateDemoSofa = () => {
+    const sofa = timeline.state.objects[demoObjectId]
+
+    if (!sofa || sofaLocked) return
+
+    const yaw = sofa.transform.yaw + Math.PI / 12
+    const operationId = 'operation-demo-' + revisionSequence.current
+
+    commitDemoRevision(
+      '将客厅沙发旋转 15 度',
+      {
+        id: operationId,
+        type: 'rotate_object',
+        source: 'user',
+        scope: {
+          type: 'object',
+          objectId: demoObjectId,
+        },
+        objectId: demoObjectId,
+        yaw,
+      },
+      {
+        type: 'rotate_object',
+        objectId: demoObjectId,
+        yaw,
+      },
+    )
+  }
+
+  const toggleDemoLock = () => {
+    const locked = Boolean(timeline.state.locks[demoObjectId])
+    const operationId = 'operation-demo-' + revisionSequence.current
+    const operation: DesignOperation = locked
+      ? {
+          id: operationId,
+          type: 'unlock',
+          source: 'user',
+          scope: {
+            type: 'object',
+            objectId: demoObjectId,
+          },
+          targetId: demoObjectId,
+        }
+      : {
+          id: operationId,
+          type: 'lock',
+          source: 'user',
+          scope: {
+            type: 'object',
+            objectId: demoObjectId,
+          },
+          targetId: demoObjectId,
+        }
+
+    commitDemoRevision(
+      locked ? '解除沙发锁定' : '锁定沙发，不允许后续自动修改',
+      operation,
+      {
+        type: 'set_lock',
+        targetId: demoObjectId,
+        locked: !locked,
+        lockedBy: 'user',
+      },
+    )
+  }
 
   return (
     <main className="shell">
       <header className="hero">
-        <div className="eyebrow">HOMESCAPE AI · PARAMETRIC ROOM RUNTIME</div>
-        <h1>同一份空间真值，开始长成可以进入的家。</h1>
+        <div className="eyebrow">HOMESCAPE AI · DESIGN STATE + REVISION</div>
+        <h1>每一次修改，都应该能解释、撤销和重放。</h1>
         <p>
-          PR #3 把 HomeSpatialModel 转换为参数化 3D：房间地面、墙体、门窗开口、梁柱与设备锚点全部来自领域模型，而不是在渲染代码中重新维护一份场景数据。
+          PR #4 建立权威 Design State 与 Revision Engine。AI、Planner 和人工操作最终都落成可执行 Mutation；
+          Renderer 只读取最新快照，Undo / Redo 不再依赖组件状态技巧。
         </p>
         <div className="status-row">
           <span className={health?.ok ? 'dot dot-online' : 'dot'} />
@@ -70,15 +240,15 @@ export function App() {
       </header>
 
       <section className="flow" aria-label="Core flow">
-        <span>HomeSpatialModel</span><b>→</b><span>RenderSnapshot</span><b>→</b>
-        <span>Renderer Adapter</span><b>→</b><span>Babylon.js</span><b>→</b>
-        <span>Interactive 3D</span>
+        <span>DesignOperation</span><b>→</b><span>Planner / Domain</span><b>→</b>
+        <span>Resolved Mutation</span><b>→</b><span>Revision</span><b>→</b>
+        <span>Design State</span><b>→</b><span>RenderSnapshot</span>
       </section>
 
       <section className="runtime-section">
         <div className="runtime-toolbar">
           <div>
-            <div className="eyebrow">REAL-SCALE FIXTURE · 90.72㎡</div>
+            <div className="eyebrow">REVISION DEMO · REAL-SCALE FIXTURE</div>
             <h2>{sampleApartment.name}</h2>
           </div>
 
@@ -103,16 +273,16 @@ export function App() {
         <div className="runtime-grid">
           <aside className="runtime-info">
             <p>
-              现在 2D Debug View 与 3D Runtime 消费完全相同的 HomeSpatialModel。渲染器只接收
-              RenderSnapshot，不直接解释 DesignRevision，避免 3D 引擎成为第二份业务状态。
+              示例沙发使用占位几何，但位置、旋转、锁定和历史都来自 Design State。每次操作都会产生 Revision，
+              再重新生成 RenderSnapshot。
             </p>
 
             <dl className="metrics">
-              <div><dt>房间</dt><dd>{floor.rooms.length}</dd></div>
-              <div><dt>墙体</dt><dd>{floor.walls.length}</dd></div>
-              <div><dt>门窗 / 开口</dt><dd>{floor.openings.length}</dd></div>
+              <div><dt>State Version</dt><dd>{timeline.state.version}</dd></div>
+              <div><dt>历史 Revision</dt><dd>{timeline.past.length}</dd></div>
+              <div><dt>可 Redo</dt><dd>{timeline.future.length}</dd></div>
+              <div><dt>沙发锁定</dt><dd>{sofaLocked ? 'LOCKED' : 'OPEN'}</dd></div>
               <div><dt>空间连接</dt><dd>{graph.edges.length}</dd></div>
-              <div><dt>结构构件</dt><dd>{floor.structuralElements.length}</dd></div>
               <div>
                 <dt>模型校验</dt>
                 <dd className={validation.valid ? 'metric-ok' : 'metric-error'}>
@@ -121,17 +291,44 @@ export function App() {
               </div>
             </dl>
 
-            <div className="runtime-note">
-              <strong>当前 Runtime</strong>
-              <span>Babylon.js 9 · WebGL</span>
-              <span>ArcRotate Camera · 参数化几何</span>
-              <span>引擎最终锁定仍受 Whole-home Benchmark 门禁约束</span>
+            <div className="revision-controls">
+              <strong>Revision Engine</strong>
+              <button type="button" disabled={sofaLocked} onClick={moveDemoSofa}>
+                沙发右移 0.4m
+              </button>
+              <button type="button" disabled={sofaLocked} onClick={rotateDemoSofa}>
+                沙发旋转 15°
+              </button>
+              <button type="button" onClick={toggleDemoLock}>
+                {sofaLocked ? '解除沙发锁定' : '锁定沙发'}
+              </button>
+              <div className="revision-control-row">
+                <button
+                  type="button"
+                  disabled={timeline.past.length === 0}
+                  onClick={() =>
+                    setTimeline((current) => undoTimeline(current).timeline)
+                  }
+                >
+                  Undo
+                </button>
+                <button
+                  type="button"
+                  disabled={timeline.future.length === 0}
+                  onClick={() =>
+                    setTimeline((current) => redoTimeline(current).timeline)
+                  }
+                >
+                  Redo
+                </button>
+              </div>
+              <code>{timeline.state.headRevisionId ?? 'initial-state'}</code>
             </div>
           </aside>
 
           <div className="viewport-shell">
             {view === '3d' ? (
-              <BabylonViewport />
+              <BabylonViewport snapshot={renderSnapshot} />
             ) : (
               <svg
                 className="plan-canvas"
@@ -176,8 +373,8 @@ export function App() {
 
             <div className="viewport-caption">
               <span>{view === '3d' ? 'Drag · Orbit / Wheel · Zoom' : 'HomeSpatialModel Debug View'}</span>
-              <span>{sampleApartment.coordinateSystem}</span>
-              <span>{sampleApartment.unit}</span>
+              <span>HEAD · {timeline.state.headRevisionId ?? 'INITIAL'}</span>
+              <span>V{timeline.state.version}</span>
             </div>
           </div>
         </div>
@@ -186,22 +383,22 @@ export function App() {
       <section className="runtime-principles">
         <article>
           <span>01</span>
-          <h3>Snapshot Driven</h3>
-          <p>Renderer 只消费解析后的快照，不拥有 Design State。</p>
+          <h3>Authoritative State</h3>
+          <p>设计对象、材质、风格和 Lock 都由 Domain State 持有。</p>
         </article>
         <article>
           <span>02</span>
-          <h3>Parametric Geometry</h3>
-          <p>墙体与门窗开口根据真实尺寸动态生成，支持异形房间地面。</p>
+          <h3>Invertible Revision</h3>
+          <p>提交 Revision 时生成逆向 Mutation，Undo / Redo 使用同一执行器。</p>
         </article>
         <article>
           <span>03</span>
-          <h3>Replaceable Runtime</h3>
-          <p>Babylon.js 是首个 Adapter，最终选择仍由整屋性能 Benchmark 决定。</p>
+          <h3>Optimistic Concurrency</h3>
+          <p>expectedParentRevisionId 防止基于旧版本覆盖新的设计结果。</p>
         </article>
       </section>
 
-      <footer>PR #3 · Parametric Room Renderer · 下一步：Design State + Revision Engine</footer>
+      <footer>PR #4 · Design State + Revision Engine · 下一步：Catalog + Planner</footer>
     </main>
   )
 }
