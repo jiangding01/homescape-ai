@@ -6,6 +6,7 @@ export interface RenderObject {
   assetId: string
   position: Vec3
   yaw: number
+  dimensions?: Vec3
 }
 
 export interface RenderSnapshot {
@@ -48,6 +49,7 @@ export function createRenderSnapshot(
       assetId: object.assetId,
       position: object.transform.position,
       yaw: object.transform.yaw,
+      ...(object.dimensions ? { dimensions: object.dimensions } : {}),
     })),
   }
 }
