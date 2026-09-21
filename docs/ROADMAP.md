@@ -59,27 +59,37 @@
 
 ## PR #6 — AI Runtime / JEV Decision
 
-- [x] typed_decision 通用 Question / Answer Contract
-- [x] TypeSafe JEV HTTP Provider
-- [x] 429 / 529 retry + timeout
-- [x] server-only TYPESAFE_API_KEY
-- [x] 独立 design-intelligence package
+- [x] typed_decision 通用 Contract
+- [x] TypeSafe JEV Provider
 - [x] 客厅 Natural Language Decision Pack
-- [x] Intent / Scope / Target / Preserve
-- [x] 尺寸 / 颜色 / 座位数 / 风格决策
 - [x] Confidence Gate
 - [x] Typed Decision → DesignOperation
-- [x] API /api/design/interpret
-- [x] Web Conversational Design UI
+- [x] API / Web Conversational Design
 - [x] AI provenance 进入 Revision
 - [ ] structured_extraction 支持精确 move / rotate
+
+## PR #7 — Real Floor Plan Import
+
+- [x] FloorPlanDraft v0.1 过渡协议
+- [x] 像素坐标 → meter 标尺校准
+- [x] Room polygon → HomeSpatialModel Candidate
+- [x] 共墙去重
+- [x] Door / Opening → RoomConnection
+- [x] confidence / provenance
+- [x] missing dimension / low confidence / topology unresolved
+- [x] Spatial Review Session
+- [x] Room type / wall thickness / ceiling height correction
+- [x] Finalize Gate
+- [x] Draft JSON 导入与 2D Review Workbench
+- [ ] CV / VLM / 公司户型数据 Extractor
+- [ ] 户型原图 overlay + 几何交互校正
 
 ## P1 — Real Room Vertical Slice
 
 目标：证明真实产品价值，而不是完成整个平台。
 
-- [ ] 真实户型图输入
-- [ ] 客厅 / 客餐厅识别与快速人工校正
+- [x] 真实户型 Candidate 输入协议
+- [x] 快速人工确认 / 校正门禁
 - [x] 参数化房间 3D
 - [x] 有限家具 Catalog
 - [x] 自然语言连续修改基础链路
@@ -88,21 +98,19 @@
 - [x] 实时 3D
 - [x] Undo / Redo / Revision
 - [x] AI 调试信息
+- [ ] Finalized Import → 现有 3D Workbench 切换
 - [ ] 真实资产 GLB
+- [ ] 真实户型自动 Extractor
 
-验收核心：
+## 下一阶段候选
 
-> 用户上传真实户型图后，可以获得一个可编辑客厅，并通过自然语言连续修改家具、材质、颜色、数量和布局；有效修改在约 1~2 秒进入实时预览。
+### PR #8 — Real Room Integration
 
-## 下一阶段
-
-### PR #7 — Real Floor Plan Import
-
-优先建立“真实户型 → HomeSpatialModel Candidate → 人工校正”的可运行链路，而不是立即追求全自动识别。
+把 Finalized HomeSpatialModel 接入当前 DesignState / Planner / Renderer，完成“导入真实房间后直接开始设计”。
 
 ### Technical Spikes
 
-1. Floor Plan → HomeSpatialModel
+1. Floor Plan Extractor Benchmark
 2. Whole-home Runtime Benchmark
 3. AI Decision Evaluation / Shadow Model
 4. Asset Pipeline
