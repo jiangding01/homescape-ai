@@ -1,4 +1,25 @@
-import type { CatalogAsset } from '../types'
+import type { CatalogAsset, CatalogRenderAsset } from '../types'
+
+function demoRenderAsset(assetId: string): CatalogRenderAsset {
+  return {
+    version: 'demo-normalized-v1',
+    unit: 'meter',
+    coordinateSystem: 'right-handed-y-up',
+    pivot: 'floor-center',
+    lods: [
+      {
+        level: 0,
+        uri: '/assets/catalog/' + assetId + '.gltf',
+        format: 'gltf',
+      },
+    ],
+    compression: {
+      meshopt: false,
+      ktx2: false,
+      draco: false,
+    },
+  }
+}
 
 export const livingRoomCatalog: readonly CatalogAsset[] = [
   {
@@ -21,6 +42,7 @@ export const livingRoomCatalog: readonly CatalogAsset[] = [
       { id: 'beige', name: '米白', colorFamily: 'beige', materialFamily: 'fabric' },
     ],
     attributes: { seats: 3 },
+    renderAsset: demoRenderAsset('catalog-sofa-oak-220'),
   },
   {
     id: 'catalog-sofa-gray-190',
@@ -41,6 +63,7 @@ export const livingRoomCatalog: readonly CatalogAsset[] = [
       { id: 'light-gray', name: '浅灰', colorFamily: 'light-gray', materialFamily: 'fabric' },
     ],
     attributes: { seats: 3 },
+    renderAsset: demoRenderAsset('catalog-sofa-gray-190'),
   },
   {
     id: 'catalog-sofa-gray-210',
@@ -61,6 +84,7 @@ export const livingRoomCatalog: readonly CatalogAsset[] = [
       { id: 'light-gray', name: '浅灰', colorFamily: 'light-gray', materialFamily: 'fabric' },
     ],
     attributes: { seats: 3 },
+    renderAsset: demoRenderAsset('catalog-sofa-gray-210'),
   },
   {
     id: 'catalog-table-oak-120',
@@ -80,6 +104,7 @@ export const livingRoomCatalog: readonly CatalogAsset[] = [
     variants: [
       { id: 'light-oak', name: '浅橡木', colorFamily: 'light-oak', materialFamily: 'wood' },
     ],
+    renderAsset: demoRenderAsset('catalog-table-oak-120'),
   },
   {
     id: 'catalog-table-stone-90',
@@ -99,6 +124,7 @@ export const livingRoomCatalog: readonly CatalogAsset[] = [
     variants: [
       { id: 'warm-white', name: '暖白', colorFamily: 'warm-white', materialFamily: 'stone' },
     ],
+    renderAsset: demoRenderAsset('catalog-table-stone-90'),
   },
   {
     id: 'catalog-plant-ficus-060',
@@ -115,6 +141,7 @@ export const livingRoomCatalog: readonly CatalogAsset[] = [
     tags: ['warm-modern', 'greenery'],
     active: true,
     price: 499,
+    renderAsset: demoRenderAsset('catalog-plant-ficus-060'),
   },
   {
     id: 'catalog-lamp-floor-040',
@@ -131,5 +158,6 @@ export const livingRoomCatalog: readonly CatalogAsset[] = [
     tags: ['warm-modern', 'black-accent'],
     active: true,
     price: 699,
+    renderAsset: demoRenderAsset('catalog-lamp-floor-040'),
   },
 ]

@@ -133,6 +133,13 @@ export function App() {
   const interpretingRef = useRef(false)
   const catalog = useMemo(() => new InMemoryCatalog(livingRoomCatalog), [])
   const planner = useMemo(() => new RuleBasedPlanner(catalog), [catalog])
+  const renderAssetResolver = useMemo(() => {
+    const assets = new Map(
+      livingRoomCatalog.map((asset) => [asset.id, asset.renderAsset]),
+    )
+
+    return (assetId: string) => assets.get(assetId)
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -152,9 +159,11 @@ export function App() {
   const renderSnapshot = useMemo(
     () =>
       activeSpatialModel.id === timeline.state.spatialModelId
-        ? createRenderSnapshot(activeSpatialModel, timeline.state)
+        ? createRenderSnapshot(activeSpatialModel, timeline.state, {
+            resolveAsset: renderAssetResolver,
+          })
         : undefined,
-    [activeSpatialModel, timeline.state],
+    [activeSpatialModel, renderAssetResolver, timeline.state],
   )
   const activeRoom = useMemo(
     () => selectPrimaryDesignRoom(activeSpatialModel),
@@ -180,6 +189,9 @@ export function App() {
   const objects = Object.values(timeline.state.objects)
   const sofa = objects.find((object) => object.category === 'sofa')
   const layoutReady = objects.length > 0
+  const renderAssetCount = livingRoomCatalog.filter(
+    (asset) => asset.renderAsset,
+  ).length
   const busy = planning || interpreting
   const usingImportedModel = activeSpatialModel.id !== sampleApartment.id
 
@@ -495,8 +507,8 @@ export function App() {
         <div className="eyebrow">HOMESCAPE AI · REAL ROOM PIPELINE</div>
         <h1>从真实户型开始，再用一句话持续修改这个家。</h1>
         <p>
-          PR #8 把 Finalize 后的 HomeSpatialModel 真正接入 DesignState、Planner、AI Context
-          与 Babylon Runtime。导入完成后，用户可以直接在自己的空间上生成并连续修改方案。
+          PR #9 把 CatalogAsset 的标准化 glTF / GLB 资产接入 RenderSnapshot 与 Babylon Runtime。
+          Planner 仍只使用真实尺寸和约束；Renderer 根据 assetId 加载视觉资产，失败时安全降级为尺寸代理。
         </p>
         <div className="status-row">
           <span className={health?.ok ? 'dot dot-online' : 'dot'} />
@@ -641,12 +653,13 @@ export function App() {
         <div className="runtime-grid">
           <aside className="runtime-info">
             <p>
-              当前 Workbench 已绑定到 Finalize 后的 HomeSpatialModel。AI、Planner、Revision
-              与 Renderer 使用同一份 active spatial model，不再依赖固定示例户型。
+              当前 Workbench 同时绑定真实空间真值与 Catalog 视觉资产。Planner 使用 Catalog
+              的真实尺寸做碰撞与摆放，Babylon 只消费已经标准化的 glTF / GLB，不在运行时猜测单位或 Pivot。
             </p>
 
             <dl className="metrics">
               <div><dt>Catalog SKU</dt><dd>{livingRoomCatalog.length}</dd></div>
+              <div><dt>Model Assets</dt><dd>{renderAssetCount}/{livingRoomCatalog.length}</dd></div>
               <div><dt>Design Objects</dt><dd>{objects.length}</dd></div>
               <div><dt>State Version</dt><dd>{timeline.state.version}</dd></div>
               <div><dt>Revision</dt><dd>{timeline.past.length}</dd></div>
@@ -818,7 +831,7 @@ export function App() {
         </article>
       </section>
 
-      <footer>PR #8 · Real Room Integration · 下一步：真实 GLB Asset Pipeline</footer>
+      <footer>PR #9 · Real Asset Pipeline · 下一步：Production SKU Asset Ingestion / LOD / KTX2 / Meshopt</footer>
     </main>
   )
 }

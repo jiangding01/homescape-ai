@@ -17,7 +17,8 @@ Real Floor Plan
 → Catalog + Planner
 → Revision
 → DesignState
-→ Realtime 3D
+→ Render Asset Resolver
+→ glTF / GLB Realtime 3D
 ~~~
 
 AI 不直接修改 Scene，也不直接写 DesignState。
@@ -78,11 +79,13 @@ TYPESAFE_MODEL=jev-latest
 
 ## 当前阶段
 
-已完成 Foundation、HomeSpatialModel、参数化 3D、Design State / Revision、Catalog / Planner、自然语言 Decision Runtime、Real Floor Plan Candidate + Human Review，以及 Finalized HomeSpatialModel → Active Workspace 集成。
+已完成 Foundation、HomeSpatialModel、参数化 3D、Design State / Revision、Catalog / Planner、自然语言 Decision Runtime、Real Floor Plan + Active Workspace，以及 glTF / GLB Render Asset Runtime。
 
-当前户型输入采用 FloorPlanDraft 过渡协议：像素坐标 + 标尺 + Room Polygon + Opening + confidence，经 Importer 转成 HomeSpatialModel Candidate；人工确认后 Finalize，并立即切换为 Planner、AI Context、DesignState 与 3D Runtime 的当前空间真值。
+CatalogAsset 现在可以携带标准化视觉资产 Manifest；RenderSnapshot 通过 assetId 解析视觉模型，Babylon 使用 AssetContainer 缓存与实例化。模型加载失败时会按照 Catalog 真实尺寸降级为几何代理，因此视觉资产故障不会破坏 Planner 或 Revision。
 
-下一阶段：Real Asset Pipeline，用真实 GLB / glTF SKU 替换当前家具几何代理。
+仓库内的 7 个 glTF 是标准化 Pipeline Fixture，用于验证真实模型加载链路，不代表公司生产 SKU。
+
+下一阶段：Production Asset Ingestion，把公司真实 SKU 接入离线 Geometry QA、LOD、Meshopt / KTX2 与版本发布流水线。
 
 目标闭环：
 
