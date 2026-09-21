@@ -7,9 +7,12 @@ HomeScape AI 从真实住宅空间出发，把自然语言转换为受限、可�
 ## 当前核心链路
 
 ~~~text
-Natural Language
+Real Floor Plan
+→ Candidate + Human Review
+→ Final HomeSpatialModel
+→ Active Workspace
+→ Natural Language
 → AI Capability Runtime
-→ Design Intelligence
 → DesignOperation[]
 → Catalog + Planner
 → Revision
@@ -75,11 +78,11 @@ TYPESAFE_MODEL=jev-latest
 
 ## 当前阶段
 
-已完成 Foundation、HomeSpatialModel、参数化 3D、Design State / Revision、Catalog / Planner、自然语言 Decision Runtime，以及 Real Floor Plan Candidate + Human Review 基础链路。
+已完成 Foundation、HomeSpatialModel、参数化 3D、Design State / Revision、Catalog / Planner、自然语言 Decision Runtime、Real Floor Plan Candidate + Human Review，以及 Finalized HomeSpatialModel → Active Workspace 集成。
 
-当前户型输入采用 FloorPlanDraft 过渡协议：像素坐标 + 标尺 + Room Polygon + Opening + confidence，经 Importer 转成 HomeSpatialModel Candidate，再经过人工确认与统一 Validation 才能 Finalize。
+当前户型输入采用 FloorPlanDraft 过渡协议：像素坐标 + 标尺 + Room Polygon + Opening + confidence，经 Importer 转成 HomeSpatialModel Candidate；人工确认后 Finalize，并立即切换为 Planner、AI Context、DesignState 与 3D Runtime 的当前空间真值。
 
-下一阶段：把 Finalized HomeSpatialModel 接入现有 DesignState / Planner / 3D Workbench。
+下一阶段：Real Asset Pipeline，用真实 GLB / glTF SKU 替换当前家具几何代理。
 
 目标闭环：
 

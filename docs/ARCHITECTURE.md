@@ -1,6 +1,6 @@
-# HomeScape AI Architecture v0.7
+# HomeScape AI Architecture v0.8
 
-## 1. 当前产品闭环
+## 1. 当前端到端闭环
 
 ~~~text
 Real Floor Plan / Company Data
@@ -11,8 +11,14 @@ HomeSpatialModel Candidate
         ↓
 Validation + Human Review
         ↓
-HomeSpatialModel
+Finalize HomeSpatialModel
         ↓
+Active Workspace
+        ├── DesignState
+        ├── AI Context
+        ├── Catalog + Planner
+        └── RenderSnapshot
+                ↓
 Natural Language / GUI
         ↓
 AI Capability Runtime
@@ -20,8 +26,6 @@ AI Capability Runtime
 Design Intelligence
         ↓
 DesignOperation[]
-        ↓
-Structured Catalog
         ↓
 Rule-based Planner
         ↓
@@ -31,14 +35,54 @@ Revision Engine
         ↓
 DesignState
         ↓
-RenderSnapshot
-        ↓
 Interactive 3D
 ~~~
 
-AI 与视觉识别都只能产生 Candidate / Proposal；确定性校验和领域状态仍拥有最终执行权。
+PR #8 的核心变化是：Finalize 不再只是“得到一个模型”，而是把该模型切换成当前设计会话唯一的 Active HomeSpatialModel。
 
-## 2. 住宅空间真值
+## 2. Active Workspace
+
+Web Vertical Slice 当前维护一组必须一致的运行时状态：
+
+- Active HomeSpatialModel
+- DesignState.spatialModelId
+- Active Room
+- Revision Timeline
+- Planner input
+- AI command context
+- RenderSnapshot
+
+切换空间模型时不会迁移旧 DesignObject。系统会创建新的空 DesignState 与 Revision Timeline，因为旧家具坐标、Room ID、Zone ID 和约束结果不能安全地假定对新空间仍然有效。
+
+默认设计房间按以下确定性顺序选择：
+
+~~~text
+living
+→ dining
+→ largest room by polygon area
+~~~
+
+后续可以把这个策略升级成用户显式选择 Room / Zone，但不应让 LLM 隐式决定当前编辑上下文。
+
+## 3. 并发与状态一致性
+
+Planner 是异步的。
+
+如果在 Planner 执行期间切换 HomeSpatialModel，旧结果可能在新 Timeline 上落盘。因此 PR #8 引入 workspace epoch：
+
+~~~text
+plan starts at epoch N
+        ↓
+async planning
+        ↓
+commit only if current epoch === N
+and current DesignState.spatialModelId === planned model.id
+and current revision head === expected head
+~~~
+
+同时 Import Workbench 在 planning / interpreting 期间禁用 Finalize，形成 UI Gate + Runtime Gate 双保险。
+
+## 4. Source of Truth
 
 HomeSpatialModel 描述住宅本体：
 
@@ -49,124 +93,61 @@ HomeSpatialModel 描述住宅本体：
 - RoomConnection
 - provenance / confidence
 
-Canonical：
+Canonical：meter、right-handed、Y-up。
 
-- unit: meter
-- coordinate: right-handed
-- up axis: +Y
+DesignState 只描述设计叠加。Render Scene 仍然只是 View。
 
-3D Scene、户型图片坐标和任何第三方识别 JSON 都不是 Source of Truth。
+## 5. Real Floor Plan Import
 
-## 3. Real Floor Plan Import
+FloorPlanDraft 是解析器与 HomeSpatialModel 之间的过渡协议，不是长期真值。
 
-PR #7 引入 FloorPlanDraft，作为图片/PDF解析器与 HomeSpatialModel 之间的过渡协议。
+不确定信息进入 unresolved，经 Human Review / Correction 解决。只有 Validation 通过且所有 requiresHumanReview 已解决，才能 Finalize。
 
-~~~text
-Pixels
-+ Calibration
-+ Room Polygons
-+ Openings
-+ Confidence
-+ Explicit Assumptions
-        ↓
-FloorPlanDraftImporter
-        ↓
-metric geometry
-+ shared wall normalization
-+ room connection
-+ provenance
-        ↓
-Candidate
-~~~
+## 6. AI Runtime
 
-P1 要求上游 Draft 在共享墙交点处切分边界。Importer 会去重完全相同或反向相同的共墙。
+AI 仍不直接修改 Scene 或 DesignState。
 
-不确定信息不会被静默接受，而进入 unresolved：
+JEV typed_decision 接收到的 activeRoom 来自 Active Workspace，而不是固定 room-living。这样同一套 Design Intelligence 可以作用在导入户型的真实 Room ID 上。
 
-- missing_dimension
-- ambiguous_wall
-- ambiguous_opening
-- unknown_room_type
-- topology_conflict
-- low_confidence
+## 7. Planner
 
-Human Review 通过 SpatialCorrection 修改 Candidate。只有 validation 通过且所有必须审核项已解决，Candidate 才能 Finalize。
+Planner 的 spatialModel 与 DesignState.spatialModelId 必须指向同一 Active Workspace。
 
-## 4. Design State
-
-HomeSpatialModel 与 DesignState 分离：
+所有 Add / Replace / Move / Rotate 继续经过：
 
 ~~~text
-HomeSpatialModel = 房屋本体
-DesignState      = 设计叠加
-Render Scene     = View
-~~~
-
-DesignState 包含 DesignObject、MaterialAssignment、StyleIntent、Lock、Revision head 与 version。
-
-## 5. AI Capability Runtime
-
-业务依赖 Capability，不依赖 Vendor。
-
-当前能力：
-
-- typed_decision → JEV Provider
-- reasoning
-- vision
-- structured_extraction
-- embedding
-- rerank
-- image_generation
-- speech
-
-JEV 只负责 typed decisions。家装语义组合位于 design-intelligence。
-
-## 6. Operation → State
-
-~~~text
-DesignOperation
-      ↓
 Catalog hard filter
-      ↓
-Anchor candidates
-      ↓
-Boundary / collision / opening clearance
-      ↓
-Soft scoring
-      ↓
-ResolvedDesignMutation
-      ↓
-Revision Engine
-      ↓
-DesignState
+→ candidate generation
+→ room / zone boundary
+→ collision
+→ column / opening clearance
+→ scoring
+→ mutation
 ~~~
 
-Lock / Preserve / Geometry Constraint 不能被 AI 绕过。
+## 8. Renderer
 
-## 7. Renderer
+RenderSnapshot 在创建时验证：
 
-Renderer 只消费 RenderSnapshot，不解释 Revision。
+~~~text
+spatialModel.id === designState.spatialModelId
+~~~
 
-Babylon.js 仍是 P1 Runtime Candidate，整屋规模前需要 Whole-home Runtime Benchmark。
-
-## 8. Security
-
-- TypeSafe API Key 只在服务端
-- 户型源文件与识别结果视为用户项目敏感数据
-- AI / Extractor 输出按不可信输入处理
-- Importer 与 Review 后仍必须经过 Schema / Geometry Validation
-- 不记录 Authorization 等敏感 Header
+因此模型切换后，Babylon Runtime、2D Debug View、Planner 与 AI Context 都消费同一份 Active HomeSpatialModel。
 
 ## 9. 下一阶段
 
-PR #7 完成的是“真实户型 Candidate + Review Gate”。
-
-后续应并行推进：
+P1 的结构闭环已经成立。下一优先级是 Real Asset Pipeline：
 
 ~~~text
-真实 Extractor / 公司户型数据 Adapter
-        +
-Finalized HomeSpatialModel → 当前 3D / Planner Vertical Slice
-        +
-真实 GLB Asset Pipeline
+真实 SKU Source
+→ asset normalization
+→ GLB / glTF
+→ LOD
+→ Meshopt / KTX2
+→ dimensions / footprint / anchors
+→ CatalogAsset
+→ Babylon Runtime
 ~~~
+
+Whole-home Runtime Benchmark 与真实 Floor Plan Extractor 继续作为并行 Technical Spike。

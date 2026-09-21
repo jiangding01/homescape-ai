@@ -84,6 +84,19 @@
 - [ ] CV / VLM / 公司户型数据 Extractor
 - [ ] 户型原图 overlay + 几何交互校正
 
+## PR #8 — Real Room Integration
+
+- [x] Finalized HomeSpatialModel → Active Workspace
+- [x] DesignState 与 spatialModelId 同步重建
+- [x] Planner 使用 Active HomeSpatialModel
+- [x] RenderSnapshot / Babylon 使用 Active HomeSpatialModel
+- [x] AI Context 使用动态 Active Room
+- [x] 默认设计房间选择：Living → Dining → Largest Room
+- [x] 模型切换时清空 Revision / AI / Planner 派生状态
+- [x] 异步 Planner 使用 workspace epoch 防止旧结果污染新模型
+- [x] 导入 Review 在设计任务执行期间禁止 Finalize
+- [x] 一键切回示例空间
+
 ## P1 — Real Room Vertical Slice
 
 目标：证明真实产品价值，而不是完成整个平台。
@@ -98,15 +111,15 @@
 - [x] 实时 3D
 - [x] Undo / Redo / Revision
 - [x] AI 调试信息
-- [ ] Finalized Import → 现有 3D Workbench 切换
+- [x] Finalized Import → 现有 3D Workbench 切换
 - [ ] 真实资产 GLB
 - [ ] 真实户型自动 Extractor
 
 ## 下一阶段候选
 
-### PR #8 — Real Room Integration
+### PR #9 — Real Asset Pipeline
 
-把 Finalized HomeSpatialModel 接入当前 DesignState / Planner / Renderer，完成“导入真实房间后直接开始设计”。
+用真实 GLB / glTF 商品资产替换当前几何代理，并建立尺寸、LOD、材质、KTX2 / Meshopt 与 CatalogAsset 的稳定映射。
 
 ### Technical Spikes
 

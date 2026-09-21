@@ -12,9 +12,12 @@ import { RuleBasedPlanner, type PlannerResult } from '@homescape/planner'
 import { createRenderSnapshot } from '@homescape/renderer-contract'
 import {
   buildRoomGraph,
+  polygonArea,
   polygonCenter,
   sampleApartment,
   validateHomeSpatialModel,
+  type HomeSpatialModel,
+  type Room,
   type Vec2,
 } from '@homescape/spatial-model'
 import {
@@ -72,10 +75,34 @@ type APIErrorResponse = {
   }
 }
 
-const initialDesignState = createInitialDesignState({
-  projectId: 'project-sample-001',
-  spatialModelId: sampleApartment.id,
-})
+const WORKBENCH_PROJECT_ID = 'project-live-workbench'
+
+function createWorkspaceTimeline(spatialModel: HomeSpatialModel) {
+  return createRevisionTimeline(
+    createInitialDesignState({
+      projectId: WORKBENCH_PROJECT_ID,
+      spatialModelId: spatialModel.id,
+    }),
+  )
+}
+
+function selectPrimaryDesignRoom(
+  spatialModel: HomeSpatialModel,
+): Room | undefined {
+  const rooms = spatialModel.floors.flatMap((floor) => floor.rooms)
+
+  return (
+    rooms.find((room) => room.type === 'living') ??
+    rooms.find((room) => room.type === 'dining') ??
+    rooms.reduce<Room | undefined>((largest, room) => {
+      if (!largest) return room
+
+      return polygonArea(room.boundary) > polygonArea(largest.boundary)
+        ? room
+        : largest
+    }, undefined)
+  )
+}
 
 function projectPoint(point: Vec2, minX: number, maxZ: number, scale: number) {
   return [(point[0] - minX) * scale, (maxZ - point[1]) * scale] as const
@@ -84,8 +111,10 @@ function projectPoint(point: Vec2, minX: number, maxZ: number, scale: number) {
 export function App() {
   const [health, setHealth] = useState<Health | null>(null)
   const [view, setView] = useState<SpatialView>('3d')
+  const [activeSpatialModel, setActiveSpatialModel] =
+    useState<HomeSpatialModel>(sampleApartment)
   const [timeline, setTimeline] = useState(() =>
-    createRevisionTimeline(initialDesignState),
+    createWorkspaceTimeline(sampleApartment),
   )
   const [planning, setPlanning] = useState(false)
   const [interpreting, setInterpreting] = useState(false)
@@ -99,6 +128,9 @@ export function App() {
     useState<PlannerResult | null>(null)
   const revisionSequence = useRef(1)
   const aiRequestSequence = useRef(1)
+  const workspaceEpochRef = useRef(0)
+  const planningRef = useRef(false)
+  const interpretingRef = useRef(false)
   const catalog = useMemo(() => new InMemoryCatalog(livingRoomCatalog), [])
   const planner = useMemo(() => new RuleBasedPlanner(catalog), [catalog])
 
@@ -113,15 +145,25 @@ export function App() {
     return () => controller.abort()
   }, [])
 
-  const validation = useMemo(() => validateHomeSpatialModel(sampleApartment), [])
-  const renderSnapshot = useMemo(
-    () => createRenderSnapshot(sampleApartment, timeline.state),
-    [timeline.state],
+  const validation = useMemo(
+    () => validateHomeSpatialModel(activeSpatialModel),
+    [activeSpatialModel],
   )
-  const floor = sampleApartment.floors[0]
+  const renderSnapshot = useMemo(
+    () =>
+      activeSpatialModel.id === timeline.state.spatialModelId
+        ? createRenderSnapshot(activeSpatialModel, timeline.state)
+        : undefined,
+    [activeSpatialModel, timeline.state],
+  )
+  const activeRoom = useMemo(
+    () => selectPrimaryDesignRoom(activeSpatialModel),
+    [activeSpatialModel],
+  )
+  const floor = activeSpatialModel.floors[0]
 
-  if (!floor) {
-    return <main className="shell">示例空间数据缺少楼层。</main>
+  if (!floor || !activeRoom || !renderSnapshot) {
+    return <main className="shell">正在切换空间工作区…</main>
   }
 
   const graph = buildRoomGraph(floor)
@@ -139,23 +181,56 @@ export function App() {
   const sofa = objects.find((object) => object.category === 'sofa')
   const layoutReady = objects.length > 0
   const busy = planning || interpreting
+  const usingImportedModel = activeSpatialModel.id !== sampleApartment.id
+
+  const activateSpatialModel = (spatialModel: HomeSpatialModel) => {
+    if (planningRef.current || interpretingRef.current) {
+      throw new Error('设计任务执行期间不能切换空间模型')
+    }
+
+    const nextValidation = validateHomeSpatialModel(spatialModel)
+
+    if (!nextValidation.valid) {
+      throw new Error('不能切换到未通过 HomeSpatialModel Validation 的空间模型')
+    }
+
+    const nextRoom = selectPrimaryDesignRoom(spatialModel)
+
+    if (!nextRoom) {
+      throw new Error('Finalize 的空间模型没有可设计房间')
+    }
+
+    workspaceEpochRef.current += 1
+    setActiveSpatialModel(spatialModel)
+    setTimeline(createWorkspaceTimeline(spatialModel))
+    setPlannerFeedback(null)
+    setAiFeedback(null)
+    setAiError(null)
+    setCommand('为' + nextRoom.name + '布置现代原木风的沙发、茶几和绿植')
+    setView('3d')
+  }
 
   const executePlan = async (
     request: string,
     operations: DesignOperation[],
     aiMeta?: AIExecutionMeta,
   ) => {
-    if (planning) return
+    if (planningRef.current) return
 
+    planningRef.current = true
     setPlanning(true)
 
     try {
       const baseTimeline = timeline
+      const spatialModel = activeSpatialModel
+      const workspaceEpoch = workspaceEpochRef.current
       const result = await planner.plan({
-        spatialModel: sampleApartment,
+        spatialModel,
         state: baseTimeline.state,
         operations,
       })
+
+      if (workspaceEpochRef.current !== workspaceEpoch) return
 
       setPlannerFeedback(result)
 
@@ -195,20 +270,27 @@ export function App() {
         const currentHead = current.state.headRevisionId ?? null
         const expectedHead = baseTimeline.state.headRevisionId ?? null
 
-        if (currentHead !== expectedHead) return current
+        if (
+          workspaceEpochRef.current !== workspaceEpoch ||
+          current.state.spatialModelId !== spatialModel.id ||
+          currentHead !== expectedHead
+        ) {
+          return current
+        }
 
         return commitToTimeline(current, draft).timeline
       })
     } finally {
+      planningRef.current = false
       setPlanning(false)
     }
   }
 
   const generateLivingRoom = () => {
     const sequence = revisionSequence.current
-    const roomScope = { type: 'room', roomId: 'room-living' } as const
+    const roomScope = { type: 'room', roomId: activeRoom.id } as const
 
-    void executePlan('为客餐厅生成现代原木风基础软装布局', [
+    void executePlan('为' + activeRoom.name + '生成现代原木风基础软装布局', [
       {
         id: 'operation-layout-' + sequence + '-sofa',
         type: 'add_object',
@@ -321,8 +403,16 @@ export function App() {
     event.preventDefault()
 
     const normalizedCommand = command.trim()
-    if (!normalizedCommand || busy) return
+    if (
+      !normalizedCommand ||
+      planningRef.current ||
+      interpretingRef.current ||
+      !activeRoom
+    ) {
+      return
+    }
 
+    interpretingRef.current = true
     setInterpreting(true)
     setAiError(null)
 
@@ -359,8 +449,8 @@ export function App() {
           context: {
             projectId: timeline.state.projectId,
             activeRoom: {
-              id: 'room-living',
-              name: '客餐厅',
+              id: activeRoom.id,
+              name: activeRoom.name,
             },
             objects: contextObjects,
           },
@@ -394,6 +484,7 @@ export function App() {
         error instanceof Error ? error.message : '自然语言设计指令解析失败',
       )
     } finally {
+      interpretingRef.current = false
       setInterpreting(false)
     }
   }
@@ -404,8 +495,8 @@ export function App() {
         <div className="eyebrow">HOMESCAPE AI · REAL ROOM PIPELINE</div>
         <h1>从真实户型开始，再用一句话持续修改这个家。</h1>
         <p>
-          PR #7 增加真实户型 Candidate + Human Review 链路，并保留既有自然语言设计能力。
-          户型解析结果和 AI 决策都不能直接成为真值，必须经过校验、确认与确定性执行。
+          PR #8 把 Finalize 后的 HomeSpatialModel 真正接入 DesignState、Planner、AI Context
+          与 Babylon Runtime。导入完成后，用户可以直接在自己的空间上生成并连续修改方案。
         </p>
         <div className="status-row">
           <span className={health?.ok ? 'dot dot-online' : 'dot'} />
@@ -420,7 +511,11 @@ export function App() {
         <span>Revision</span><b>→</b><span>Realtime 3D</span>
       </section>
 
-      <FloorPlanImportWorkbench />
+      <FloorPlanImportWorkbench
+        activeSpatialModelId={activeSpatialModel.id}
+        disabled={busy}
+        onFinalized={activateSpatialModel}
+      />
 
       <section className="command-section">
         <div>
@@ -453,7 +548,9 @@ export function App() {
             <button
               type="button"
               onClick={() =>
-                setCommand('为客厅布置现代原木风的沙发、茶几和绿植')
+                setCommand(
+                  '为' + activeRoom.name + '布置现代原木风的沙发、茶几和绿植',
+                )
               }
             >
               第一版布局
@@ -516,7 +613,11 @@ export function App() {
             <div className="eyebrow">
               VERTICAL SLICE · {livingRoomCatalog.length} CURATED SKU
             </div>
-            <h2>{sampleApartment.name}</h2>
+            <h2>{activeSpatialModel.name}</h2>
+            <div className="workspace-badge">
+              <span>{usingImportedModel ? 'IMPORTED MODEL' : 'SAMPLE MODEL'}</span>
+              <strong>{activeRoom.name}</strong>
+            </div>
           </div>
 
           <div className="segmented-control" role="group" aria-label="空间视图">
@@ -540,8 +641,8 @@ export function App() {
         <div className="runtime-grid">
           <aside className="runtime-info">
             <p>
-              AI 只决定“想改什么”，不生成最终坐标。所有 AI Operation 继续走同一套 Catalog、
-              Geometry Constraint、Revision 与 Undo / Redo。
+              当前 Workbench 已绑定到 Finalize 后的 HomeSpatialModel。AI、Planner、Revision
+              与 Renderer 使用同一份 active spatial model，不再依赖固定示例户型。
             </p>
 
             <dl className="metrics">
@@ -550,6 +651,7 @@ export function App() {
               <div><dt>State Version</dt><dd>{timeline.state.version}</dd></div>
               <div><dt>Revision</dt><dd>{timeline.past.length}</dd></div>
               <div><dt>Room Graph</dt><dd>{graph.edges.length}</dd></div>
+              <div><dt>Active Room</dt><dd>{activeRoom.name}</dd></div>
               <div>
                 <dt>空间校验</dt>
                 <dd className={validation.valid ? 'metric-ok' : 'metric-error'}>
@@ -558,6 +660,18 @@ export function App() {
               </div>
             </dl>
 
+            <div className="workspace-controls">
+              <strong>Active Spatial Model</strong>
+              <code>{activeSpatialModel.id}</code>
+              <button
+                type="button"
+                disabled={busy || !usingImportedModel}
+                onClick={() => activateSpatialModel(sampleApartment)}
+              >
+                切回示例空间并重置设计
+              </button>
+            </div>
+
             <div className="revision-controls">
               <strong>Deterministic Controls</strong>
               <button
@@ -565,7 +679,7 @@ export function App() {
                 disabled={busy || layoutReady}
                 onClick={generateLivingRoom}
               >
-                自动布置客厅
+                自动布置{activeRoom.name}
               </button>
               <button
                 type="button"
@@ -680,7 +794,7 @@ export function App() {
                   : 'HomeSpatialModel Debug View'}
               </span>
               <span>HEAD · {timeline.state.headRevisionId ?? 'INITIAL'}</span>
-              <span>V{timeline.state.version}</span>
+              <span>{activeRoom.name} · V{timeline.state.version}</span>
             </div>
           </div>
         </div>
@@ -704,7 +818,7 @@ export function App() {
         </article>
       </section>
 
-      <footer>PR #7 · Real Floor Plan Import · 下一步：Finalized Model → Real Room Workbench</footer>
+      <footer>PR #8 · Real Room Integration · 下一步：真实 GLB Asset Pipeline</footer>
     </main>
   )
 }
