@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@homescape/domain": "workspace:*",
+    "@homescape/renderer-babylon": "workspace:*",
     "@homescape/spatial-model": "workspace:*",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"

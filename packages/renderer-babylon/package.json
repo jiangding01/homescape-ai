@@ -1,0 +1,19 @@
+{
+  "name": "@homescape/renderer-babylon",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@babylonjs/core": "9.27.1",
+    "@homescape/domain": "workspace:*",
+    "@homescape/renderer-contract": "workspace:*",
+    "@homescape/spatial-model": "workspace:*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}
