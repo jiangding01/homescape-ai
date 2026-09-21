@@ -1,4 +1,4 @@
-# HomeScape AI Architecture v0.1
+# HomeScape AI Architecture v0.2
 
 ## 1. 产品目标
 
@@ -43,39 +43,64 @@ Design Revision
         └──────────► Hi-Fi Render / Business Runtime
 ~~~
 
-## 3. Source of Truth
+## 3. HomeSpatialModel
 
-### HomeSpatialModel
+HomeSpatialModel 是住宅空间 Source of Truth，与 AI Provider 和 3D Engine 无关。
 
-描述住宅真实几何和拓扑：
+~~~text
+HomeSpatialModel
+└── Floor
+    ├── Room
+    │   └── Zone
+    ├── Wall
+    ├── Opening
+    ├── StructuralElement
+    │   ├── Column
+    │   └── Beam
+    ├── UtilityAnchor
+    └── RoomConnection
+~~~
 
-- Project / Floor
-- Room
-- Zone
-- Wall / Door / Window / Opening
-- Column / Beam
-- 固定设施与 Utility Anchor
-- Room Graph
+Canonical 约定：
 
-约定：
+- unit：meter
+- coordinate：right-handed
+- up axis：+Y
+- Floor.elevation 表达楼层高度
+- RoomConnection 表达空间拓扑，不依赖渲染场景推断邻接关系
+- provenance / confidence 用于记录户型识别和扫描来源的可靠度
 
-- Canonical unit：meter
-- Canonical coordinate：right-handed, Y-up
-- Renderer Adapter 负责转换到具体引擎坐标约定
+导入链路：
 
-### Design State
+~~~text
+Floor Plan / CAD / Scan / Company Data
+                ↓
+             Importer
+                ↓
+      HomeSpatialModel Candidate
+                ↓
+             Validation
+          ┌─────┴─────┐
+          │           │
+       valid      unresolved
+          │           │
+          │      Human Review
+          └─────┬─────┘
+                ↓
+       HomeSpatialModel
+~~~
 
-包含在 HomeSpatialModel 上叠加的设计对象、材质、灯光、设计语言和锁定状态。
+无法确定的尺寸、墙体、门窗或房间类型进入 unresolved issue，不允许通过 AI 猜测后直接当作几何真值。
 
-### Revision
+## 4. Design State 与 Revision
+
+Design State 包含在 HomeSpatialModel 上叠加的设计对象、材质、灯光、设计语言和锁定状态。
 
 所有 AI 和人工编辑统一转为 DesignOperation，并形成 Revision。Revision 是 Undo / Redo / Replay / Compare / Audit 的基础。
 
-## 4. AI 边界
+## 5. AI 边界
 
 业务层不直接调用 JEV、OpenAI、Anthropic 等 Vendor。
-
-调用形式：
 
 ~~~ts
 ai.execute({
@@ -95,15 +120,9 @@ Capability 首批定义：
 - image_generation
 - speech
 
-当前计划：
+typed_decision 当前以 JEV 为 primary，但不进入 Domain Contract。AI 只能产生受限 Domain Operation 或候选结果；正式场景变更必须经过验证与 Planner。
 
-- typed_decision：JEV primary
-- 其他能力：按专项 Spike 后配置
-- Provider 必须通过统一结果 Contract 归一化
-
-AI 只能产生受限 Domain Operation 或候选结果；任何正式场景变更必须经过验证与 Planner。
-
-## 5. Scope Model
+## 6. Scope Model
 
 ~~~text
 Project
@@ -113,16 +132,38 @@ Project
             └── Object
 ~~~
 
-Scope 是 AI 请求的一等数据。
+Scope 是 AI 请求的一等数据。Lock / Preserve 高于 AI 建议。
 
-## 6. Planner
+## 7. Planner
 
-P1 先使用 Rule + Anchor + Collision + Scoring。复杂度达到门槛后再接 CP-SAT，不提前过度设计。
+P1 先使用 Rule + Anchor + Collision + Scoring：
 
-## 7. Renderer
+~~~text
+DesignOperation
+      ↓
+Catalog Candidate
+      ↓
+Anchor Generation
+      ↓
+Candidate Placement
+      ↓
+Hard Constraint Filter
+      ↓
+Scoring / Ranking
+      ↓
+Geometry Refinement
+      ↓
+Final Validation
+~~~
 
-Domain 不依赖 Babylon.js 或 Three.js。最终 3D Runtime 通过 Whole-home Runtime Benchmark 决定。
+复杂度达到门槛后再评估 CP-SAT。
 
-## 8. 后续基础设施
+## 8. Renderer
+
+Domain 不依赖 Babylon.js 或 Three.js。Renderer Adapter 负责把 canonical HomeSpatialModel 转换为具体引擎。
+
+最终 3D Runtime 通过 Whole-home Runtime Benchmark 决定。
+
+## 9. 后续基础设施
 
 按需求逐步引入 PostgreSQL、Object Storage/CDN、Redis、Durable Workflow、OpenTelemetry 与 Yjs；均不阻塞首个 Vertical Slice。

@@ -8,20 +8,39 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 code { font-size: 12px; color: #65685a; }
 .shell { width: min(1180px, calc(100% - 48px)); margin: 0 auto; padding: 72px 0 40px; }
-.hero { max-width: 900px; }
+.hero { max-width: 940px; }
 .eyebrow { font-size: 12px; letter-spacing: 0.18em; font-weight: 700; color: #6c6d60; }
 h1 { margin: 24px 0 18px; font-size: clamp(44px, 7vw, 88px); line-height: 0.98; letter-spacing: -0.055em; font-weight: 600; }
-.hero > p { max-width: 760px; margin: 0; font-size: 20px; line-height: 1.7; color: #626457; }
+.hero > p { max-width: 820px; margin: 0; font-size: 20px; line-height: 1.7; color: #626457; }
 .status-row { display: flex; align-items: center; gap: 9px; margin-top: 28px; font-size: 13px; }
 .dot { width: 8px; height: 8px; border-radius: 999px; background: #b0a99b; }
 .dot-online { background: #4e794d; }
 .flow { margin: 72px 0 34px; padding: 18px 22px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; border-top: 1px solid #cfcbc1; border-bottom: 1px solid #cfcbc1; font-size: 13px; }
 .flow b { color: #a19c91; }
+.spatial-section { display: grid; grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.28fr); gap: 42px; padding: 28px 0 64px; align-items: start; }
+.spatial-copy h2 { margin: 14px 0 12px; font-size: 30px; letter-spacing: -0.025em; }
+.spatial-copy > p { margin: 0; color: #696a5f; line-height: 1.75; }
+.metrics { margin: 28px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid #cfcbc1; border-left: 1px solid #cfcbc1; }
+.metrics div { padding: 14px; border-right: 1px solid #cfcbc1; border-bottom: 1px solid #cfcbc1; }
+.metrics dt { margin-bottom: 6px; color: #77786d; font-size: 11px; }
+.metrics dd { margin: 0; font-size: 18px; }
+.metric-ok { color: #4e794d; }
+.metric-error { color: #914b3d; }
+.plan-shell { padding: 18px; background: #e7e2d8; border: 1px solid #c8c2b6; }
+.plan-canvas { display: block; width: 100%; height: auto; min-height: 420px; background: #f8f5ee; }
+.room-shape { fill: #ebe7de; stroke: #bdb6aa; stroke-width: 1; }
+.wall-line { stroke: #272920; stroke-width: 9; stroke-linecap: square; }
+.room-label { fill: #5d5f54; font-size: 18px; font-weight: 600; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+.plan-caption { display: flex; justify-content: space-between; gap: 12px; margin-top: 12px; color: #717267; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
 .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid #cfcbc1; border-left: 1px solid #cfcbc1; }
 .card { min-height: 180px; padding: 24px; border-right: 1px solid #cfcbc1; border-bottom: 1px solid #cfcbc1; }
 .card h2 { margin: 0 0 14px; font-size: 17px; font-weight: 600; }
 .card p { margin: 0; color: #6d6e63; line-height: 1.7; }
 footer { margin-top: 32px; color: #77786d; font-size: 12px; }
+@media (max-width: 900px) {
+  .spatial-section { grid-template-columns: 1fr; }
+  .plan-canvas { min-height: 320px; }
+}
 @media (max-width: 820px) {
   .shell { width: min(100% - 28px, 1180px); padding-top: 44px; }
   .grid { grid-template-columns: 1fr; }
