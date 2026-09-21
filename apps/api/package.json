@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@homescape/ai-runtime": "workspace:*",
+    "@homescape/design-intelligence": "workspace:*",
     "@homescape/domain": "workspace:*",
     "fastify": "^5.6.1"
   },

@@ -6,19 +6,35 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; }
-button { font: inherit; }
+button, textarea { font: inherit; }
 button:disabled { cursor: not-allowed; opacity: 0.42; }
 code { font-size: 12px; color: #65685a; }
 .shell { width: min(1240px, calc(100% - 48px)); margin: 0 auto; padding: 64px 0 40px; }
 .hero { max-width: 980px; }
 .eyebrow { font-size: 12px; letter-spacing: 0.18em; font-weight: 700; color: #6c6d60; }
 h1 { margin: 24px 0 18px; font-size: clamp(44px, 7vw, 88px); line-height: 0.98; letter-spacing: -0.055em; font-weight: 600; }
-.hero > p { max-width: 860px; margin: 0; font-size: 20px; line-height: 1.7; color: #626457; }
+.hero > p { max-width: 880px; margin: 0; font-size: 20px; line-height: 1.7; color: #626457; }
 .status-row { display: flex; align-items: center; gap: 9px; margin-top: 28px; font-size: 13px; }
 .dot { width: 8px; height: 8px; border-radius: 999px; background: #b0a99b; }
 .dot-online { background: #4e794d; }
 .flow { margin: 64px 0 28px; padding: 18px 22px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; border-top: 1px solid #cfcbc1; border-bottom: 1px solid #cfcbc1; font-size: 13px; }
 .flow b { color: #a19c91; }
+.command-section { display: grid; grid-template-columns: minmax(260px, 0.44fr) minmax(0, 1fr); gap: 36px; padding: 18px 0 58px; }
+.command-section h2 { margin: 10px 0 12px; font-size: 30px; letter-spacing: -0.03em; }
+.command-section > div:first-child > p { margin: 0; color: #6b6c61; line-height: 1.75; }
+.command-workbench { padding: 18px; border: 1px solid #c8c2b6; background: #e7e2d8; }
+.command-composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: stretch; }
+.command-composer textarea { width: 100%; resize: vertical; min-height: 92px; padding: 13px 14px; border: 1px solid #bdb6aa; outline: none; background: #fbf8f1; color: #262820; line-height: 1.6; }
+.command-composer textarea:focus { border-color: #77786d; }
+.command-composer button { min-width: 150px; border: 0; padding: 0 16px; background: #1f211b; color: #f5f2eb; cursor: pointer; }
+.command-samples { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.command-samples button { border: 1px solid #c1baae; padding: 6px 9px; background: #f4f0e7; color: #66675d; cursor: pointer; font-size: 11px; }
+.ai-feedback { display: grid; gap: 8px; margin-top: 14px; padding: 13px; border: 1px solid #c3bcae; background: rgba(248, 245, 238, 0.64); color: #616358; font-size: 12px; }
+.ai-feedback-error { border-color: #c7a99f; color: #914b3d; }
+.ai-feedback-head { display: flex; justify-content: space-between; gap: 12px; }
+.ai-feedback-head strong { color: #292b24; text-transform: uppercase; }
+.decision-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.decision-chips code { padding: 4px 6px; background: #ebe6db; }
 .runtime-section { padding: 10px 0 62px; }
 .runtime-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
 .runtime-toolbar h2 { margin: 9px 0 0; font-size: 28px; letter-spacing: -0.025em; }
@@ -57,7 +73,7 @@ h1 { margin: 24px 0 18px; font-size: clamp(44px, 7vw, 88px); line-height: 0.98; 
 .runtime-principles p { margin: 0; color: #6d6e63; line-height: 1.65; }
 footer { margin-top: 32px; color: #77786d; font-size: 12px; }
 @media (max-width: 900px) {
-  .runtime-grid { grid-template-columns: 1fr; }
+  .command-section, .runtime-grid { grid-template-columns: 1fr; }
   .runtime-info { border-right: 0; border-bottom: 1px solid #c8c2b6; }
   .runtime-principles { grid-template-columns: 1fr; }
   .viewport-host, .plan-canvas { min-height: 400px; height: 58vh; }
@@ -66,6 +82,8 @@ footer { margin-top: 32px; color: #77786d; font-size: 12px; }
   .shell { width: min(100% - 28px, 1240px); padding-top: 42px; }
   .runtime-toolbar { align-items: stretch; flex-direction: column; }
   .segmented-control { align-self: flex-start; }
+  .command-composer { grid-template-columns: 1fr; }
+  .command-composer button { min-height: 42px; }
   .viewport-shell { padding: 8px; }
   .viewport-host, .plan-canvas { min-height: 340px; }
 }
