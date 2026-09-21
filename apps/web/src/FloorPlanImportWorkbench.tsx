@@ -17,6 +17,7 @@ import {
 } from '@homescape/spatial-model'
 import {
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
 } from 'react'
@@ -48,10 +49,14 @@ function projectPoint(
 }
 
 export interface FloorPlanImportWorkbenchProps {
+  activeSpatialModelId?: string
+  disabled?: boolean
   onFinalized?: (model: HomeSpatialModel) => void
 }
 
 export function FloorPlanImportWorkbench({
+  activeSpatialModelId,
+  disabled = false,
   onFinalized,
 }: FloorPlanImportWorkbenchProps) {
   const importer = useMemo(() => new FloorPlanDraftImporter(), [])
@@ -59,7 +64,7 @@ export function FloorPlanImportWorkbench({
   const [session, setSession] = useState<SpatialReviewSession | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [finalized, setFinalized] = useState(false)
+  const importSequenceRef = useRef(0)
   const [roomTypeDrafts, setRoomTypeDrafts] = useState<
     Record<string, RoomType>
   >({})
@@ -67,12 +72,14 @@ export function FloorPlanImportWorkbench({
   const importDraft = async (nextDraft: FloorPlanDraft) => {
     setLoading(true)
     setError(null)
-    setFinalized(false)
+    importSequenceRef.current += 1
+    const importProjectId =
+      'project-import-preview-' + importSequenceRef.current
 
     try {
       const result = await importer.parse(nextDraft, {
-        projectId: 'project-import-preview',
-        projectName: '户型导入候选方案',
+        projectId: importProjectId,
+        projectName: nextDraft.source.sourceLabel,
         sourceKind: nextDraft.source.kind,
         sourceId: nextDraft.source.sourceLabel,
         sourceLabel: nextDraft.source.sourceLabel,
@@ -132,6 +139,8 @@ export function FloorPlanImportWorkbench({
   const pendingIssues = session
     ? getPendingSpatialReviewIssues(session)
     : []
+  const finalized =
+    session !== null && session.model.id === activeSpatialModelId
   const validation = session
     ? validateHomeSpatialModel(session.model)
     : null
@@ -214,9 +223,8 @@ export function FloorPlanImportWorkbench({
 
     try {
       const model = finalizeSpatialReview(session)
-      setFinalized(true)
-      setError(null)
       onFinalized?.(model)
+      setError(null)
     } catch (finalizeError) {
       setError(
         finalizeError instanceof Error
@@ -230,7 +238,7 @@ export function FloorPlanImportWorkbench({
     <section className="floorplan-import-section">
       <div className="floorplan-import-copy">
         <div className="eyebrow">
-          PR #7 · REAL FLOOR PLAN IMPORT
+          PR #8 · REAL ROOM INTEGRATION
         </div>
         <h2>先把真实户型变成“可核验的候选模型”。</h2>
         <p>
@@ -239,7 +247,11 @@ export function FloorPlanImportWorkbench({
         </p>
 
         <div className="floorplan-import-actions">
-          <button type="button" disabled={loading} onClick={loadSample}>
+          <button
+            type="button"
+            disabled={loading || disabled}
+            onClick={loadSample}
+          >
             {loading ? '正在导入…' : '加载示例 Draft'}
           </button>
           <label className="floorplan-file-button">
@@ -247,6 +259,7 @@ export function FloorPlanImportWorkbench({
             <input
               type="file"
               accept="application/json,.json"
+              disabled={disabled}
               onChange={(event) => void uploadDraft(event)}
             />
           </label>
@@ -411,6 +424,7 @@ export function FloorPlanImportWorkbench({
                       {isUnknownRoom && roomId ? (
                         <div className="floorplan-review-action">
                           <select
+                            disabled={disabled}
                             value={
                               roomTypeDrafts[roomId] ?? 'other'
                             }
@@ -433,6 +447,7 @@ export function FloorPlanImportWorkbench({
                           </select>
                           <button
                             type="button"
+                            disabled={disabled}
                             onClick={() =>
                               confirmRoomType(issue.id, roomId)
                             }
@@ -443,6 +458,7 @@ export function FloorPlanImportWorkbench({
                       ) : isWallThickness ? (
                         <button
                           type="button"
+                          disabled={disabled}
                           onClick={() =>
                             confirmWallThickness(
                               issue.id,
@@ -455,6 +471,7 @@ export function FloorPlanImportWorkbench({
                       ) : (
                         <button
                           type="button"
+                          disabled={disabled}
                           onClick={() =>
                             resolveIssue(
                               issue.id,
@@ -474,7 +491,7 @@ export function FloorPlanImportWorkbench({
             <div className="floorplan-finalize-row">
               <span>
                 {finalized
-                  ? 'READY · 已形成可进入业务链路的 HomeSpatialModel'
+                  ? 'ACTIVE · 当前 Candidate 已进入 Real Room Workbench'
                   : canFinalizeSpatialReview(session)
                     ? '所有门禁已通过'
                     : '完成全部人工确认后才能 Finalize'}
@@ -482,6 +499,7 @@ export function FloorPlanImportWorkbench({
               <button
                 type="button"
                 disabled={
+                  disabled ||
                   finalized ||
                   !canFinalizeSpatialReview(session)
                 }

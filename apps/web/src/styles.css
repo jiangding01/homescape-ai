@@ -87,3 +87,52 @@ footer { margin-top: 32px; color: #77786d; font-size: 12px; }
   .viewport-shell { padding: 8px; }
   .viewport-host, .plan-canvas { min-height: 340px; }
 }
+
+.workspace-badge {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 9px;
+  color: #6d6e63;
+  font-size: 11px;
+}
+
+.workspace-badge span {
+  padding: 3px 6px;
+  border: 1px solid #c7c0b4;
+  background: #e9e4da;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.workspace-badge strong {
+  color: #2f3129;
+  font-weight: 600;
+}
+
+.workspace-controls {
+  display: grid;
+  gap: 7px;
+  margin-top: 22px;
+  padding: 14px;
+  border: 1px solid #c8c2b6;
+  background: rgba(248, 245, 238, 0.48);
+}
+
+.workspace-controls strong {
+  font-size: 12px;
+}
+
+.workspace-controls code {
+  overflow-wrap: anywhere;
+}
+
+.workspace-controls button {
+  min-height: 34px;
+  border: 1px solid #bdb6aa;
+  padding: 7px 10px;
+  background: #f5f1e9;
+  color: #34362e;
+  cursor: pointer;
+  text-align: left;
+}
