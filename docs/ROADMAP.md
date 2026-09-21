@@ -28,14 +28,26 @@
 
 - [x] RenderSnapshot 单向同步边界
 - [x] Babylon.js 首个 Renderer Adapter
-- [x] 参数化 Room floor
-- [x] 参数化 Wall
-- [x] Door / Window / Opening cutout
-- [x] Column / Beam
-- [x] Utility Anchor debug marker
-- [x] Project / Floor / Room / Zone / Object focus contract
+- [x] 参数化 Room floor / Wall / Opening
+- [x] Column / Beam / Utility Anchor
+- [x] Scope focus contract
 - [x] 3D / 2D Debug 双视图
 - [ ] Whole-home Runtime Benchmark
+
+## PR #4 — Design State + Revision Engine
+
+- [x] DesignState
+- [x] DesignObject / Material / StyleIntent / Lock
+- [x] ResolvedDesignMutation
+- [x] Revision commit
+- [x] inverseMutations
+- [x] Undo / Redo
+- [x] Replay
+- [x] expectedParentRevisionId 乐观并发控制
+- [x] Lock enforcement
+- [x] DesignState → RenderSnapshot
+- [x] Renderer Contract 移除 Planner 类型依赖
+- [x] Web Revision Demo
 
 ## P1 — Real Room Vertical Slice
 

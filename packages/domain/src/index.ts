@@ -1,3 +1,6 @@
+export * from './mutations'
 export * from './operations'
 export * from './revision'
+export * from './revision-engine'
 export * from './scope'
+export * from './state'

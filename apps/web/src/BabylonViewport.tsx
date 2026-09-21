@@ -1,9 +1,15 @@
 import { BabylonSceneRenderer } from '@homescape/renderer-babylon'
-import { sampleApartment } from '@homescape/spatial-model'
+import type { RenderSnapshot } from '@homescape/renderer-contract'
 import { useEffect, useRef } from 'react'
 
-export function BabylonViewport() {
+export interface BabylonViewportProps {
+  snapshot: RenderSnapshot
+}
+
+export function BabylonViewport({ snapshot }: BabylonViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const rendererRef = useRef<BabylonSceneRenderer | null>(null)
+  const readyRef = useRef<Promise<void> | null>(null)
 
   useEffect(() => {
     const host = hostRef.current
@@ -11,29 +17,47 @@ export function BabylonViewport() {
     if (!host) return
 
     const renderer = new BabylonSceneRenderer()
-    let disposed = false
+    const ready = renderer.mount(host)
 
-    void renderer
-      .mount(host)
+    rendererRef.current = renderer
+    readyRef.current = ready
+
+    void ready.catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      host.dataset.error = message
+    })
+
+    return () => {
+      rendererRef.current = null
+      readyRef.current = null
+      void renderer.dispose()
+    }
+  }, [])
+
+  useEffect(() => {
+    const host = hostRef.current
+    const renderer = rendererRef.current
+    const ready = readyRef.current
+
+    if (!host || !renderer || !ready) return
+
+    let cancelled = false
+
+    void ready
       .then(() => {
-        if (disposed) return
-
-        return renderer.sync({
-          spatialModel: sampleApartment,
-          objects: [],
-        })
+        if (cancelled) return
+        return renderer.sync(snapshot)
       })
       .catch((error: unknown) => {
-        if (disposed) return
+        if (cancelled) return
         const message = error instanceof Error ? error.message : String(error)
         host.dataset.error = message
       })
 
     return () => {
-      disposed = true
-      void renderer.dispose()
+      cancelled = true
     }
-  }, [])
+  }, [snapshot])
 
   return (
     <div className="viewport-host" ref={hostRef}>

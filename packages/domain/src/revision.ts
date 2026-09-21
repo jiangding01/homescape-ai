@@ -1,3 +1,4 @@
+import type { ResolvedDesignMutation } from './mutations'
 import type { DesignOperation } from './operations'
 
 export interface RevisionProvenance {
@@ -8,12 +9,27 @@ export interface RevisionProvenance {
   plannerVersion?: string
 }
 
+export interface DesignRevisionDraft {
+  id: string
+  projectId: string
+  expectedParentRevisionId: string | null
+  request?: string
+  operations: DesignOperation[]
+  mutations: ResolvedDesignMutation[]
+  provenance: RevisionProvenance
+  createdAt: string
+}
+
 export interface DesignRevision {
   id: string
   projectId: string
+  parentRevisionId?: string
   request?: string
   operations: DesignOperation[]
-  parentRevisionId?: string
+  mutations: ResolvedDesignMutation[]
+  inverseMutations: ResolvedDesignMutation[]
   provenance: RevisionProvenance
+  stateVersionBefore: number
+  stateVersionAfter: number
   createdAt: string
 }
