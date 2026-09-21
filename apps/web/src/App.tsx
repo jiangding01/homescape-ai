@@ -17,7 +17,13 @@ import {
   validateHomeSpatialModel,
   type Vec2,
 } from '@homescape/spatial-model'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
 import { BabylonViewport } from './BabylonViewport'
 
 type Health = {
@@ -27,6 +33,42 @@ type Health = {
 }
 
 type SpatialView = '3d' | '2d'
+
+type AIInterpretationResponse = {
+  status: 'ready' | 'needs_clarification' | 'unsupported' | 'no_change'
+  message: string
+  operations: DesignOperation[]
+  decisions: {
+    intent: { value: string; confidence: number }
+    scope: { value: string; confidence: number }
+    target: { value: string; confidence: number }
+    category: { value: string; confidence: number }
+    size: { value: string; confidence: number }
+    color: { value: string; confidence: number }
+    seats: { value: string; confidence: number }
+    style: { value: string; confidence: number }
+    preserveOthers: number
+  }
+  meta: {
+    provider: string
+    model: string
+    latencyMs: number
+    usage?: {
+      inputTokens?: number
+      outputTokens?: number
+      cost?: number
+    }
+  }
+}
+
+type AIExecutionMeta = AIInterpretationResponse['meta']
+
+type APIErrorResponse = {
+  error?: {
+    code?: string
+    message?: string
+  }
+}
 
 const initialDesignState = createInitialDesignState({
   projectId: 'project-sample-001',
@@ -44,8 +86,17 @@ export function App() {
     createRevisionTimeline(initialDesignState),
   )
   const [planning, setPlanning] = useState(false)
-  const [plannerFeedback, setPlannerFeedback] = useState<PlannerResult | null>(null)
+  const [interpreting, setInterpreting] = useState(false)
+  const [command, setCommand] = useState(
+    '为客厅布置现代原木风的沙发、茶几和绿植',
+  )
+  const [aiFeedback, setAiFeedback] =
+    useState<AIInterpretationResponse | null>(null)
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [plannerFeedback, setPlannerFeedback] =
+    useState<PlannerResult | null>(null)
   const revisionSequence = useRef(1)
+  const aiRequestSequence = useRef(1)
   const catalog = useMemo(() => new InMemoryCatalog(livingRoomCatalog), [])
   const planner = useMemo(() => new RuleBasedPlanner(catalog), [catalog])
 
@@ -85,8 +136,13 @@ export function App() {
   const objects = Object.values(timeline.state.objects)
   const sofa = objects.find((object) => object.category === 'sofa')
   const layoutReady = objects.length > 0
+  const busy = planning || interpreting
 
-  const executePlan = async (request: string, operations: DesignOperation[]) => {
+  const executePlan = async (
+    request: string,
+    operations: DesignOperation[],
+    aiMeta?: AIExecutionMeta,
+  ) => {
     if (planning) return
 
     setPlanning(true)
@@ -118,9 +174,17 @@ export function App() {
         operations,
         mutations: result.mutations,
         provenance: {
-          actor: 'system',
+          actor: operations.some((operation) => operation.source === 'ai')
+            ? 'ai'
+            : 'system',
           plannerVersion: 'rule-based-v0.1',
           schemaVersion: '0.1.0',
+          ...(aiMeta
+            ? {
+                provider: aiMeta.provider,
+                model: aiMeta.model,
+              }
+            : {}),
         },
         createdAt: new Date().toISOString(),
       }
@@ -251,14 +315,95 @@ export function App() {
     )
   }
 
+  const submitNaturalLanguageCommand = async (event: FormEvent) => {
+    event.preventDefault()
+
+    const normalizedCommand = command.trim()
+    if (!normalizedCommand || busy) return
+
+    setInterpreting(true)
+    setAiError(null)
+
+    try {
+      const requestId = 'design-command-' + aiRequestSequence.current
+      aiRequestSequence.current += 1
+
+      const contextObjects = objects.map((object) => {
+        const catalogName = object.metadata?.catalogName
+        const currentColor = object.metadata?.colorFamily
+
+        return {
+          id: object.id,
+          category: object.category,
+          label: typeof catalogName === 'string' ? catalogName : object.category,
+          locked: Boolean(timeline.state.locks[object.id]),
+          ...(object.roomId ? { roomId: object.roomId } : {}),
+          ...(object.zoneId ? { zoneId: object.zoneId } : {}),
+          ...(object.dimensions ? { width: object.dimensions[0] } : {}),
+          ...(typeof currentColor === 'string'
+            ? { colorFamily: currentColor }
+            : {}),
+        }
+      })
+
+      const response = await fetch('/api/design/interpret', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          requestId,
+          command: normalizedCommand,
+          context: {
+            projectId: timeline.state.projectId,
+            activeRoom: {
+              id: 'room-living',
+              name: '客餐厅',
+            },
+            objects: contextObjects,
+          },
+        }),
+      })
+
+      const payload: unknown = await response.json()
+
+      if (!response.ok) {
+        const apiError = payload as APIErrorResponse
+        throw new Error(
+          apiError.error?.message ?? '自然语言设计接口请求失败',
+        )
+      }
+
+      const interpretation = payload as AIInterpretationResponse
+      setAiFeedback(interpretation)
+
+      if (
+        interpretation.status === 'ready' &&
+        interpretation.operations.length > 0
+      ) {
+        await executePlan(
+          normalizedCommand,
+          interpretation.operations,
+          interpretation.meta,
+        )
+      }
+    } catch (error) {
+      setAiError(
+        error instanceof Error ? error.message : '自然语言设计指令解析失败',
+      )
+    } finally {
+      setInterpreting(false)
+    }
+  }
+
   return (
     <main className="shell">
       <header className="hero">
-        <div className="eyebrow">HOMESCAPE AI · CATALOG + RULE-BASED PLANNER</div>
-        <h1>设计意图开始变成有尺寸、能落地的家具布局。</h1>
+        <div className="eyebrow">HOMESCAPE AI · AI DECISION RUNTIME</div>
+        <h1>现在，用户真的可以用一句话修改这个家。</h1>
         <p>
-          PR #5 引入有限 Catalog 与首个确定性 Planner：先过滤真实尺寸商品，再生成墙边/中心/自由 Anchor，
-          经过房间边界、家具碰撞、柱体和门洞净空校验后，才写入 Revision。
+          PR #6 把自然语言接入 AI Capability Runtime。JEV 只负责快速的 typed decision，
+          代码把结果组合成受限 DesignOperation；真正的商品选择、碰撞与空间执行仍由 Planner 决定。
         </p>
         <div className="status-row">
           <span className={health?.ok ? 'dot dot-online' : 'dot'} />
@@ -268,15 +413,105 @@ export function App() {
       </header>
 
       <section className="flow" aria-label="Core flow">
-        <span>DesignOperation</span><b>→</b><span>Catalog Filter</span><b>→</b>
-        <span>Anchor Candidates</span><b>→</b><span>Hard Constraints</span><b>→</b>
-        <span>Scoring</span><b>→</b><span>Resolved Mutation</span>
+        <span>Natural Language</span><b>→</b><span>JEV Typed Decision</span><b>→</b>
+        <span>DesignOperation[]</span><b>→</b><span>Planner</span><b>→</b>
+        <span>Revision</span><b>→</b><span>Realtime 3D</span>
+      </section>
+
+      <section className="command-section">
+        <div>
+          <div className="eyebrow">CONVERSATIONAL DESIGN · SERVER-SIDE AI</div>
+          <h2>告诉 HomeScape 你想怎么改</h2>
+          <p>
+            API Key 只保留在服务端。当前 Decision Pack 会并行判断意图、作用域、目标家具、尺寸、颜色、
+            座位数、风格和 Preserve 语义，再由确定性代码生成操作。
+          </p>
+        </div>
+
+        <div className="command-workbench">
+          <form className="command-composer" onSubmit={submitNaturalLanguageCommand}>
+            <textarea
+              value={command}
+              onChange={(event) => setCommand(event.target.value)}
+              rows={3}
+              placeholder="例如：沙发小一点，换成浅灰色三人位，其他地方别动"
+            />
+            <button type="submit" disabled={busy || !command.trim()}>
+              {interpreting
+                ? 'JEV 正在判断…'
+                : planning
+                  ? 'Planner 正在执行…'
+                  : '执行自然语言修改'}
+            </button>
+          </form>
+
+          <div className="command-samples">
+            <button
+              type="button"
+              onClick={() =>
+                setCommand('为客厅布置现代原木风的沙发、茶几和绿植')
+              }
+            >
+              第一版布局
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setCommand('沙发小一点，换成浅灰色三人位，其他地方别动')
+              }
+            >
+              局部替换
+            </button>
+            <button
+              type="button"
+              onClick={() => setCommand('把沙发锁定，后面都不要改它')}
+            >
+              Lock
+            </button>
+          </div>
+
+          {aiError ? (
+            <div className="ai-feedback ai-feedback-error">
+              <strong>AI Runtime</strong>
+              <span>{aiError}</span>
+            </div>
+          ) : null}
+
+          {aiFeedback ? (
+            <div className="ai-feedback">
+              <div className="ai-feedback-head">
+                <strong>{aiFeedback.status}</strong>
+                <span>
+                  {aiFeedback.meta.provider} · {aiFeedback.meta.model} ·{' '}
+                  {aiFeedback.meta.latencyMs}ms
+                </span>
+              </div>
+              <span>{aiFeedback.message}</span>
+              <div className="decision-chips">
+                <code>
+                  intent={aiFeedback.decisions.intent.value} (
+                  {aiFeedback.decisions.intent.confidence.toFixed(2)})
+                </code>
+                <code>
+                  target={aiFeedback.decisions.target.value} (
+                  {aiFeedback.decisions.target.confidence.toFixed(2)})
+                </code>
+                <code>
+                  preserve={aiFeedback.decisions.preserveOthers.toFixed(2)}
+                </code>
+                <code>ops={aiFeedback.operations.length}</code>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </section>
 
       <section className="runtime-section">
         <div className="runtime-toolbar">
           <div>
-            <div className="eyebrow">PLANNER DEMO · {livingRoomCatalog.length} CURATED SKU</div>
+            <div className="eyebrow">
+              VERTICAL SLICE · {livingRoomCatalog.length} CURATED SKU
+            </div>
             <h2>{sampleApartment.name}</h2>
           </div>
 
@@ -301,8 +536,8 @@ export function App() {
         <div className="runtime-grid">
           <aside className="runtime-info">
             <p>
-              当前使用精选 Mock SKU，但 Schema 已按生产 Catalog 设计。3D 中的占位盒严格使用商品真实尺寸，
-              Planner 不允许对象穿墙、重叠柱体、堵住门洞或与已有家具碰撞。
+              AI 只决定“想改什么”，不生成最终坐标。所有 AI Operation 继续走同一套 Catalog、
+              Geometry Constraint、Revision 与 Undo / Redo。
             </p>
 
             <dl className="metrics">
@@ -320,40 +555,50 @@ export function App() {
             </dl>
 
             <div className="revision-controls">
-              <strong>Rule-based Planner</strong>
+              <strong>Deterministic Controls</strong>
               <button
                 type="button"
-                disabled={planning || layoutReady}
+                disabled={busy || layoutReady}
                 onClick={generateLivingRoom}
               >
-                {planning ? '正在规划…' : '自动布置客厅'}
+                自动布置客厅
               </button>
               <button
                 type="button"
-                disabled={planning || !sofa || Boolean(sofa && timeline.state.locks[sofa.id])}
+                disabled={
+                  busy ||
+                  !sofa ||
+                  Boolean(sofa && timeline.state.locks[sofa.id])
+                }
                 onClick={replaceWithCompactSofa}
               >
                 沙发小一点 + 浅灰色
               </button>
               <button
                 type="button"
-                disabled={planning || !sofa}
+                disabled={busy || !sofa}
                 onClick={lockSofa}
               >
-                {sofa && timeline.state.locks[sofa.id] ? '解除沙发锁定' : '锁定沙发'}
+                {sofa && timeline.state.locks[sofa.id]
+                  ? '解除沙发锁定'
+                  : '锁定沙发'}
               </button>
               <div className="revision-control-row">
                 <button
                   type="button"
-                  disabled={planning || timeline.past.length === 0}
-                  onClick={() => setTimeline((current) => undoTimeline(current).timeline)}
+                  disabled={busy || timeline.past.length === 0}
+                  onClick={() =>
+                    setTimeline((current) => undoTimeline(current).timeline)
+                  }
                 >
                   Undo
                 </button>
                 <button
                   type="button"
-                  disabled={planning || timeline.future.length === 0}
-                  onClick={() => setTimeline((current) => redoTimeline(current).timeline)}
+                  disabled={busy || timeline.future.length === 0}
+                  onClick={() =>
+                    setTimeline((current) => redoTimeline(current).timeline)
+                  }
                 >
                   Redo
                 </button>
@@ -364,7 +609,9 @@ export function App() {
               <div className="planner-feedback">
                 <strong>Last Plan</strong>
                 <span>候选：{plannerFeedback.diagnostics.candidateCount}</span>
-                <span>淘汰：{plannerFeedback.diagnostics.rejectedCandidateCount}</span>
+                <span>
+                  淘汰：{plannerFeedback.diagnostics.rejectedCandidateCount}
+                </span>
                 <span>通过决策：{plannerFeedback.decisions.length}</span>
                 <span>约束问题：{plannerFeedback.violations.length}</span>
                 <span>耗时：{plannerFeedback.diagnostics.elapsedMs}ms</span>
@@ -389,7 +636,9 @@ export function App() {
                   const center = polygonCenter(room.boundary)
                   const [labelX, labelY] = projectPoint(center, minX, maxZ, scale)
                   const polygonPoints = room.boundary.points
-                    .map((point) => projectPoint(point, minX, maxZ, scale).join(','))
+                    .map((point) =>
+                      projectPoint(point, minX, maxZ, scale).join(','),
+                    )
                     .join(' ')
 
                   return (
@@ -421,7 +670,11 @@ export function App() {
             )}
 
             <div className="viewport-caption">
-              <span>{view === '3d' ? 'CATALOG DIMENSIONS · REAL SCALE' : 'HomeSpatialModel Debug View'}</span>
+              <span>
+                {view === '3d'
+                  ? 'AI → OPERATIONS → CONSTRAINTS → REAL SCALE'
+                  : 'HomeSpatialModel Debug View'}
+              </span>
               <span>HEAD · {timeline.state.headRevisionId ?? 'INITIAL'}</span>
               <span>V{timeline.state.version}</span>
             </div>
@@ -432,22 +685,22 @@ export function App() {
       <section className="runtime-principles">
         <article>
           <span>01</span>
-          <h3>Hard Filter First</h3>
-          <p>品类、宽度、深度、座位数、价格和颜色先做结构化过滤，不让 Embedding 取代硬约束。</p>
+          <h3>AI Proposes</h3>
+          <p>JEV 只产生 typed decisions，确定性解释器组合成受限 DesignOperation。</p>
         </article>
         <article>
           <span>02</span>
-          <h3>Geometry Before Taste</h3>
-          <p>候选先通过房间边界、家具碰撞、结构柱和门洞净空，再进行软评分。</p>
+          <h3>Confidence Gates</h3>
+          <p>Intent 或 Target 置信度不足时不执行，直接要求进一步澄清。</p>
         </article>
         <article>
           <span>03</span>
-          <h3>Planner Writes Mutations</h3>
-          <p>Planner 不直接操作 Babylon Scene，而是输出可审计的 ResolvedDesignMutation。</p>
+          <h3>Planner Executes</h3>
+          <p>空间、商品、碰撞、Lock 和 Revision 仍由确定性系统拥有最终决定权。</p>
         </article>
       </section>
 
-      <footer>PR #5 · Catalog + Rule-based Planner · 下一步：AI Runtime / JEV Decision</footer>
+      <footer>PR #6 · AI Runtime / JEV Decision · 下一步：Real Floor Plan Import</footer>
     </main>
   )
 }

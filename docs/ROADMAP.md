@@ -52,42 +52,61 @@
 - [x] Wall / Center / Free Anchor
 - [x] Room / Zone boundary validation
 - [x] 2D OBB / SAT 家具碰撞
-- [x] Column collision
-- [x] Door / Opening clearance
+- [x] Column / Door / Opening constraint
 - [x] Lock / Preserve enforcement
-- [x] Add / Replace / Move / Rotate / Remove operation planning
 - [x] Planner → ResolvedDesignMutation
 - [x] 商品真实尺寸进入 RenderSnapshot
-- [x] Web 自动布置 / 局部替换 Demo
+
+## PR #6 — AI Runtime / JEV Decision
+
+- [x] typed_decision 通用 Question / Answer Contract
+- [x] TypeSafe JEV HTTP Provider
+- [x] 429 / 529 retry + timeout
+- [x] server-only TYPESAFE_API_KEY
+- [x] 独立 design-intelligence package
+- [x] 客厅 Natural Language Decision Pack
+- [x] Intent / Scope / Target / Preserve
+- [x] 尺寸 / 颜色 / 座位数 / 风格决策
+- [x] Confidence Gate
+- [x] Typed Decision → DesignOperation
+- [x] API /api/design/interpret
+- [x] Web Conversational Design UI
+- [x] AI provenance 进入 Revision
+- [ ] structured_extraction 支持精确 move / rotate
 
 ## P1 — Real Room Vertical Slice
 
 目标：证明真实产品价值，而不是完成整个平台。
 
-- 户型图输入
-- 客厅 / 客餐厅识别与快速人工校正
-- 参数化房间 3D
-- 有限家具 Catalog
-- 初始风格设计
-- 自然语言连续修改
-- Room / Zone / Object Scope
-- Planner：Anchor + Collision + Scoring
-- 实时 3D
-- Undo / Redo / Revision
-- AI 调试面板
+- [ ] 真实户型图输入
+- [ ] 客厅 / 客餐厅识别与快速人工校正
+- [x] 参数化房间 3D
+- [x] 有限家具 Catalog
+- [x] 自然语言连续修改基础链路
+- [x] Room / Zone / Object Scope
+- [x] Planner：Anchor + Collision + Scoring
+- [x] 实时 3D
+- [x] Undo / Redo / Revision
+- [x] AI 调试信息
+- [ ] 真实资产 GLB
 
 验收核心：
 
 > 用户上传真实户型图后，可以获得一个可编辑客厅，并通过自然语言连续修改家具、材质、颜色、数量和布局；有效修改在约 1~2 秒进入实时预览。
 
-## Technical Spikes
+## 下一阶段
+
+### PR #7 — Real Floor Plan Import
+
+优先建立“真实户型 → HomeSpatialModel Candidate → 人工校正”的可运行链路，而不是立即追求全自动识别。
+
+### Technical Spikes
 
 1. Floor Plan → HomeSpatialModel
 2. Whole-home Runtime Benchmark
-3. Constraint Planner
-4. AI Decision Runtime
-5. Asset Pipeline
-6. End-to-End Vertical Slice
+3. AI Decision Evaluation / Shadow Model
+4. Asset Pipeline
+5. End-to-End Real Room Vertical Slice
 
 ## P2 — Whole Home
 
