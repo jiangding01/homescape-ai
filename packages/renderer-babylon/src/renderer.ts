@@ -22,7 +22,6 @@ import {
   type Floor,
   type Polygon2D,
   type Room,
-  type SpatialId,
   type Vec2,
   type Wall,
 } from '@homescape/spatial-model'
@@ -163,14 +162,19 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
     }
 
     for (const object of snapshot.objects) {
+      const dimensions = object.dimensions ?? ([0.72, 0.72, 0.72] as const)
       const proxy = MeshBuilder.CreateBox(
         'planned-object-' + object.id,
-        { width: 0.72, height: 0.72, depth: 0.72 },
+        {
+          width: dimensions[0],
+          height: dimensions[1],
+          depth: dimensions[2],
+        },
         scene,
       )
       proxy.position = new Vector3(
         object.position[0],
-        object.position[1] + 0.36,
+        object.position[1] + dimensions[1] / 2,
         object.position[2],
       )
       proxy.rotation.y = object.yaw

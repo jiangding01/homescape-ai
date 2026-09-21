@@ -1,3 +1,4 @@
+import { InMemoryCatalog, livingRoomCatalog } from '@homescape/catalog'
 import {
   commitToTimeline,
   createInitialDesignState,
@@ -6,8 +7,8 @@ import {
   undoTimeline,
   type DesignOperation,
   type DesignRevisionDraft,
-  type ResolvedDesignMutation,
 } from '@homescape/domain'
+import { RuleBasedPlanner, type PlannerResult } from '@homescape/planner'
 import { createRenderSnapshot } from '@homescape/renderer-contract'
 import {
   buildRoomGraph,
@@ -27,27 +28,9 @@ type Health = {
 
 type SpatialView = '3d' | '2d'
 
-const demoObjectId = 'object-demo-sofa'
-
 const initialDesignState = createInitialDesignState({
   projectId: 'project-sample-001',
   spatialModelId: sampleApartment.id,
-  objects: [
-    {
-      id: demoObjectId,
-      assetId: 'fixture-sofa',
-      category: 'sofa',
-      roomId: 'room-living',
-      transform: {
-        position: [2.1, 0, 2.7] as const,
-        yaw: 0,
-      },
-      dimensions: [2.2, 0.85, 0.95] as const,
-      provenance: {
-        source: 'system',
-      },
-    },
-  ],
 })
 
 function projectPoint(point: Vec2, minX: number, maxZ: number, scale: number) {
@@ -60,7 +43,11 @@ export function App() {
   const [timeline, setTimeline] = useState(() =>
     createRevisionTimeline(initialDesignState),
   )
+  const [planning, setPlanning] = useState(false)
+  const [plannerFeedback, setPlannerFeedback] = useState<PlannerResult | null>(null)
   const revisionSequence = useRef(1)
+  const catalog = useMemo(() => new InMemoryCatalog(livingRoomCatalog), [])
+  const planner = useMemo(() => new RuleBasedPlanner(catalog), [catalog])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -95,142 +82,183 @@ export function App() {
   const scale = 84
   const canvasWidth = (maxX - minX) * scale
   const canvasHeight = (maxZ - minZ) * scale
-  const sofaLocked = Boolean(timeline.state.locks[demoObjectId])
+  const objects = Object.values(timeline.state.objects)
+  const sofa = objects.find((object) => object.category === 'sofa')
+  const layoutReady = objects.length > 0
 
-  const commitDemoRevision = (
-    request: string,
-    operation: DesignOperation,
-    mutation: ResolvedDesignMutation,
-  ) => {
-    setTimeline((current) => {
-      const revisionId = 'revision-demo-' + revisionSequence.current
+  const executePlan = async (request: string, operations: DesignOperation[]) => {
+    if (planning) return
+
+    setPlanning(true)
+
+    try {
+      const baseTimeline = timeline
+      const result = await planner.plan({
+        spatialModel: sampleApartment,
+        state: baseTimeline.state,
+        operations,
+      })
+
+      setPlannerFeedback(result)
+
+      const hasBlockingViolation = result.violations.some(
+        (violation) => violation.severity === 'error',
+      )
+
+      if (result.mutations.length === 0 || hasBlockingViolation) return
+
+      const sequence = revisionSequence.current
       revisionSequence.current += 1
-
+      const revisionId = 'revision-planner-' + sequence
       const draft: DesignRevisionDraft = {
         id: revisionId,
-        projectId: current.state.projectId,
-        expectedParentRevisionId: current.state.headRevisionId ?? null,
+        projectId: baseTimeline.state.projectId,
+        expectedParentRevisionId: baseTimeline.state.headRevisionId ?? null,
         request,
-        operations: [operation],
-        mutations: [mutation],
+        operations,
+        mutations: result.mutations,
         provenance: {
-          actor: 'user',
+          actor: 'system',
+          plannerVersion: 'rule-based-v0.1',
           schemaVersion: '0.1.0',
         },
         createdAt: new Date().toISOString(),
       }
 
-      return commitToTimeline(current, draft).timeline
-    })
+      setTimeline((current) => {
+        const currentHead = current.state.headRevisionId ?? null
+        const expectedHead = baseTimeline.state.headRevisionId ?? null
+
+        if (currentHead !== expectedHead) return current
+
+        return commitToTimeline(current, draft).timeline
+      })
+    } finally {
+      setPlanning(false)
+    }
   }
 
-  const moveDemoSofa = () => {
-    const sofa = timeline.state.objects[demoObjectId]
+  const generateLivingRoom = () => {
+    const sequence = revisionSequence.current
+    const roomScope = { type: 'room', roomId: 'room-living' } as const
 
-    if (!sofa || sofaLocked) return
-
-    const position = [
-      sofa.transform.position[0] + 0.4,
-      sofa.transform.position[1],
-      sofa.transform.position[2],
-    ] as const
-    const operationId = 'operation-demo-' + revisionSequence.current
-
-    commitDemoRevision(
-      '将客厅沙发向右移动 0.4 米',
+    void executePlan('为客餐厅生成现代原木风基础软装布局', [
       {
-        id: operationId,
-        type: 'move_object',
+        id: 'operation-layout-' + sequence + '-sofa',
+        type: 'add_object',
+        source: 'user',
+        scope: roomScope,
+        category: 'sofa',
+        requirements: {
+          style: 'warm-modern',
+          minSeats: 3,
+          maxWidth: 2.3,
+        },
+      },
+      {
+        id: 'operation-layout-' + sequence + '-table',
+        type: 'add_object',
+        source: 'user',
+        scope: roomScope,
+        category: 'coffee_table',
+        requirements: {
+          style: 'warm-modern',
+          maxWidth: 1.3,
+        },
+      },
+      {
+        id: 'operation-layout-' + sequence + '-plant',
+        type: 'add_object',
+        source: 'user',
+        scope: roomScope,
+        category: 'plant',
+        requirements: {
+          styleTags: ['warm-modern', 'greenery'],
+        },
+      },
+    ])
+  }
+
+  const replaceWithCompactSofa = () => {
+    if (!sofa) return
+
+    const sequence = revisionSequence.current
+
+    void executePlan('沙发小一点，换成浅灰色三人位，其他家具保持不变', [
+      {
+        id: 'operation-replace-' + sequence + '-sofa',
+        type: 'replace_object',
         source: 'user',
         scope: {
           type: 'object',
-          objectId: demoObjectId,
+          objectId: sofa.id,
         },
-        objectId: demoObjectId,
-        position,
+        objectId: sofa.id,
+        requirements: {
+          maxWidth: 1.95,
+          minSeats: 3,
+          colorFamily: 'light-gray',
+          style: 'warm-modern',
+        },
       },
-      {
-        type: 'move_object',
-        objectId: demoObjectId,
-        position,
-      },
-    )
+      ...objects
+        .filter((object) => object.id !== sofa.id)
+        .map(
+          (object): DesignOperation => ({
+            id: 'operation-preserve-' + sequence + '-' + object.id,
+            type: 'preserve',
+            source: 'user',
+            scope: {
+              type: 'object',
+              objectId: object.id,
+            },
+            targetId: object.id,
+          }),
+        ),
+    ])
   }
 
-  const rotateDemoSofa = () => {
-    const sofa = timeline.state.objects[demoObjectId]
+  const lockSofa = () => {
+    if (!sofa) return
 
-    if (!sofa || sofaLocked) return
-
-    const yaw = sofa.transform.yaw + Math.PI / 12
-    const operationId = 'operation-demo-' + revisionSequence.current
-
-    commitDemoRevision(
-      '将客厅沙发旋转 15 度',
-      {
-        id: operationId,
-        type: 'rotate_object',
-        source: 'user',
-        scope: {
-          type: 'object',
-          objectId: demoObjectId,
-        },
-        objectId: demoObjectId,
-        yaw,
-      },
-      {
-        type: 'rotate_object',
-        objectId: demoObjectId,
-        yaw,
-      },
-    )
-  }
-
-  const toggleDemoLock = () => {
-    const locked = Boolean(timeline.state.locks[demoObjectId])
-    const operationId = 'operation-demo-' + revisionSequence.current
+    const sequence = revisionSequence.current
+    const locked = Boolean(timeline.state.locks[sofa.id])
     const operation: DesignOperation = locked
       ? {
-          id: operationId,
+          id: 'operation-lock-' + sequence + '-sofa',
           type: 'unlock',
           source: 'user',
           scope: {
             type: 'object',
-            objectId: demoObjectId,
+            objectId: sofa.id,
           },
-          targetId: demoObjectId,
+          targetId: sofa.id,
         }
       : {
-          id: operationId,
+          id: 'operation-lock-' + sequence + '-sofa',
           type: 'lock',
           source: 'user',
           scope: {
             type: 'object',
-            objectId: demoObjectId,
+            objectId: sofa.id,
           },
-          targetId: demoObjectId,
+          targetId: sofa.id,
         }
 
-    commitDemoRevision(
-      locked ? '解除沙发锁定' : '锁定沙发，不允许后续自动修改',
-      operation,
-      {
-        type: 'set_lock',
-        targetId: demoObjectId,
-        locked: !locked,
-        lockedBy: 'user',
-      },
+    void executePlan(
+      locked ? '解除沙发锁定' : '锁定沙发，后续自动设计不要修改',
+      [operation],
     )
   }
 
   return (
     <main className="shell">
       <header className="hero">
-        <div className="eyebrow">HOMESCAPE AI · DESIGN STATE + REVISION</div>
-        <h1>每一次修改，都应该能解释、撤销和重放。</h1>
+        <div className="eyebrow">HOMESCAPE AI · CATALOG + RULE-BASED PLANNER</div>
+        <h1>设计意图开始变成有尺寸、能落地的家具布局。</h1>
         <p>
-          PR #4 建立权威 Design State 与 Revision Engine。AI、Planner 和人工操作最终都落成可执行 Mutation；
-          Renderer 只读取最新快照，Undo / Redo 不再依赖组件状态技巧。
+          PR #5 引入有限 Catalog 与首个确定性 Planner：先过滤真实尺寸商品，再生成墙边/中心/自由 Anchor，
+          经过房间边界、家具碰撞、柱体和门洞净空校验后，才写入 Revision。
         </p>
         <div className="status-row">
           <span className={health?.ok ? 'dot dot-online' : 'dot'} />
@@ -240,15 +268,15 @@ export function App() {
       </header>
 
       <section className="flow" aria-label="Core flow">
-        <span>DesignOperation</span><b>→</b><span>Planner / Domain</span><b>→</b>
-        <span>Resolved Mutation</span><b>→</b><span>Revision</span><b>→</b>
-        <span>Design State</span><b>→</b><span>RenderSnapshot</span>
+        <span>DesignOperation</span><b>→</b><span>Catalog Filter</span><b>→</b>
+        <span>Anchor Candidates</span><b>→</b><span>Hard Constraints</span><b>→</b>
+        <span>Scoring</span><b>→</b><span>Resolved Mutation</span>
       </section>
 
       <section className="runtime-section">
         <div className="runtime-toolbar">
           <div>
-            <div className="eyebrow">REVISION DEMO · REAL-SCALE FIXTURE</div>
+            <div className="eyebrow">PLANNER DEMO · {livingRoomCatalog.length} CURATED SKU</div>
             <h2>{sampleApartment.name}</h2>
           </div>
 
@@ -273,18 +301,18 @@ export function App() {
         <div className="runtime-grid">
           <aside className="runtime-info">
             <p>
-              示例沙发使用占位几何，但位置、旋转、锁定和历史都来自 Design State。每次操作都会产生 Revision，
-              再重新生成 RenderSnapshot。
+              当前使用精选 Mock SKU，但 Schema 已按生产 Catalog 设计。3D 中的占位盒严格使用商品真实尺寸，
+              Planner 不允许对象穿墙、重叠柱体、堵住门洞或与已有家具碰撞。
             </p>
 
             <dl className="metrics">
+              <div><dt>Catalog SKU</dt><dd>{livingRoomCatalog.length}</dd></div>
+              <div><dt>Design Objects</dt><dd>{objects.length}</dd></div>
               <div><dt>State Version</dt><dd>{timeline.state.version}</dd></div>
-              <div><dt>历史 Revision</dt><dd>{timeline.past.length}</dd></div>
-              <div><dt>可 Redo</dt><dd>{timeline.future.length}</dd></div>
-              <div><dt>沙发锁定</dt><dd>{sofaLocked ? 'LOCKED' : 'OPEN'}</dd></div>
-              <div><dt>空间连接</dt><dd>{graph.edges.length}</dd></div>
+              <div><dt>Revision</dt><dd>{timeline.past.length}</dd></div>
+              <div><dt>Room Graph</dt><dd>{graph.edges.length}</dd></div>
               <div>
-                <dt>模型校验</dt>
+                <dt>空间校验</dt>
                 <dd className={validation.valid ? 'metric-ok' : 'metric-error'}>
                   {validation.valid ? 'VALID' : 'INVALID'}
                 </dd>
@@ -292,38 +320,59 @@ export function App() {
             </dl>
 
             <div className="revision-controls">
-              <strong>Revision Engine</strong>
-              <button type="button" disabled={sofaLocked} onClick={moveDemoSofa}>
-                沙发右移 0.4m
+              <strong>Rule-based Planner</strong>
+              <button
+                type="button"
+                disabled={planning || layoutReady}
+                onClick={generateLivingRoom}
+              >
+                {planning ? '正在规划…' : '自动布置客厅'}
               </button>
-              <button type="button" disabled={sofaLocked} onClick={rotateDemoSofa}>
-                沙发旋转 15°
+              <button
+                type="button"
+                disabled={planning || !sofa || Boolean(sofa && timeline.state.locks[sofa.id])}
+                onClick={replaceWithCompactSofa}
+              >
+                沙发小一点 + 浅灰色
               </button>
-              <button type="button" onClick={toggleDemoLock}>
-                {sofaLocked ? '解除沙发锁定' : '锁定沙发'}
+              <button
+                type="button"
+                disabled={planning || !sofa}
+                onClick={lockSofa}
+              >
+                {sofa && timeline.state.locks[sofa.id] ? '解除沙发锁定' : '锁定沙发'}
               </button>
               <div className="revision-control-row">
                 <button
                   type="button"
-                  disabled={timeline.past.length === 0}
-                  onClick={() =>
-                    setTimeline((current) => undoTimeline(current).timeline)
-                  }
+                  disabled={planning || timeline.past.length === 0}
+                  onClick={() => setTimeline((current) => undoTimeline(current).timeline)}
                 >
                   Undo
                 </button>
                 <button
                   type="button"
-                  disabled={timeline.future.length === 0}
-                  onClick={() =>
-                    setTimeline((current) => redoTimeline(current).timeline)
-                  }
+                  disabled={planning || timeline.future.length === 0}
+                  onClick={() => setTimeline((current) => redoTimeline(current).timeline)}
                 >
                   Redo
                 </button>
               </div>
-              <code>{timeline.state.headRevisionId ?? 'initial-state'}</code>
             </div>
+
+            {plannerFeedback ? (
+              <div className="planner-feedback">
+                <strong>Last Plan</strong>
+                <span>候选：{plannerFeedback.diagnostics.candidateCount}</span>
+                <span>淘汰：{plannerFeedback.diagnostics.rejectedCandidateCount}</span>
+                <span>通过决策：{plannerFeedback.decisions.length}</span>
+                <span>约束问题：{plannerFeedback.violations.length}</span>
+                <span>耗时：{plannerFeedback.diagnostics.elapsedMs}ms</span>
+                {plannerFeedback.violations[0] ? (
+                  <code>{plannerFeedback.violations[0].message}</code>
+                ) : null}
+              </div>
+            ) : null}
           </aside>
 
           <div className="viewport-shell">
@@ -372,7 +421,7 @@ export function App() {
             )}
 
             <div className="viewport-caption">
-              <span>{view === '3d' ? 'Drag · Orbit / Wheel · Zoom' : 'HomeSpatialModel Debug View'}</span>
+              <span>{view === '3d' ? 'CATALOG DIMENSIONS · REAL SCALE' : 'HomeSpatialModel Debug View'}</span>
               <span>HEAD · {timeline.state.headRevisionId ?? 'INITIAL'}</span>
               <span>V{timeline.state.version}</span>
             </div>
@@ -383,22 +432,22 @@ export function App() {
       <section className="runtime-principles">
         <article>
           <span>01</span>
-          <h3>Authoritative State</h3>
-          <p>设计对象、材质、风格和 Lock 都由 Domain State 持有。</p>
+          <h3>Hard Filter First</h3>
+          <p>品类、宽度、深度、座位数、价格和颜色先做结构化过滤，不让 Embedding 取代硬约束。</p>
         </article>
         <article>
           <span>02</span>
-          <h3>Invertible Revision</h3>
-          <p>提交 Revision 时生成逆向 Mutation，Undo / Redo 使用同一执行器。</p>
+          <h3>Geometry Before Taste</h3>
+          <p>候选先通过房间边界、家具碰撞、结构柱和门洞净空，再进行软评分。</p>
         </article>
         <article>
           <span>03</span>
-          <h3>Optimistic Concurrency</h3>
-          <p>expectedParentRevisionId 防止基于旧版本覆盖新的设计结果。</p>
+          <h3>Planner Writes Mutations</h3>
+          <p>Planner 不直接操作 Babylon Scene，而是输出可审计的 ResolvedDesignMutation。</p>
         </article>
       </section>
 
-      <footer>PR #4 · Design State + Revision Engine · 下一步：Catalog + Planner</footer>
+      <footer>PR #5 · Catalog + Rule-based Planner · 下一步：AI Runtime / JEV Decision</footer>
     </main>
   )
 }

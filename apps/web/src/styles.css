@@ -13,7 +13,7 @@ code { font-size: 12px; color: #65685a; }
 .hero { max-width: 980px; }
 .eyebrow { font-size: 12px; letter-spacing: 0.18em; font-weight: 700; color: #6c6d60; }
 h1 { margin: 24px 0 18px; font-size: clamp(44px, 7vw, 88px); line-height: 0.98; letter-spacing: -0.055em; font-weight: 600; }
-.hero > p { max-width: 850px; margin: 0; font-size: 20px; line-height: 1.7; color: #626457; }
+.hero > p { max-width: 860px; margin: 0; font-size: 20px; line-height: 1.7; color: #626457; }
 .status-row { display: flex; align-items: center; gap: 9px; margin-top: 28px; font-size: 13px; }
 .dot { width: 8px; height: 8px; border-radius: 999px; background: #b0a99b; }
 .dot-online { background: #4e794d; }
@@ -25,7 +25,7 @@ h1 { margin: 24px 0 18px; font-size: clamp(44px, 7vw, 88px); line-height: 0.98; 
 .segmented-control { display: inline-flex; padding: 3px; border: 1px solid #c9c3b7; background: #e7e2d8; }
 .segmented-control button { border: 0; padding: 8px 13px; background: transparent; color: #6d6e63; cursor: pointer; }
 .segmented-control button.active { background: #1f211b; color: #f5f2eb; }
-.runtime-grid { display: grid; grid-template-columns: minmax(270px, 0.4fr) minmax(0, 1fr); border: 1px solid #c8c2b6; background: #e7e2d8; }
+.runtime-grid { display: grid; grid-template-columns: minmax(285px, 0.42fr) minmax(0, 1fr); border: 1px solid #c8c2b6; background: #e7e2d8; }
 .runtime-info { padding: 22px; border-right: 1px solid #c8c2b6; }
 .runtime-info > p { margin: 0; color: #65675b; line-height: 1.7; }
 .metrics { margin: 24px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid #c8c2b6; border-left: 1px solid #c8c2b6; }
@@ -35,11 +35,12 @@ h1 { margin: 24px 0 18px; font-size: clamp(44px, 7vw, 88px); line-height: 0.98; 
 .metric-ok { color: #4e794d; }
 .metric-error { color: #914b3d; }
 .revision-controls { display: grid; gap: 8px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #c8c2b6; }
-.revision-controls strong { margin-bottom: 3px; font-size: 12px; }
+.revision-controls strong, .planner-feedback strong { margin-bottom: 3px; font-size: 12px; }
 .revision-controls > button, .revision-control-row button { min-height: 34px; padding: 7px 10px; border: 1px solid #bdb6aa; background: #f5f1e9; color: #34362e; cursor: pointer; text-align: left; }
 .revision-controls > button:hover:not(:disabled), .revision-control-row button:hover:not(:disabled) { background: #fffdf8; }
 .revision-control-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.revision-controls code { margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.planner-feedback { display: grid; gap: 5px; margin-top: 20px; padding: 14px; border: 1px solid #c8c2b6; background: rgba(248, 245, 238, 0.55); color: #6d6e63; font-size: 11px; }
+.planner-feedback code { margin-top: 4px; white-space: normal; color: #914b3d; }
 .viewport-shell { min-width: 0; padding: 14px; }
 .viewport-host, .plan-canvas { position: relative; display: block; width: 100%; height: min(68vh, 680px); min-height: 520px; background: #f8f5ee; }
 .viewport-host[data-error]::after { content: attr(data-error); position: absolute; inset: 18px; padding: 16px; color: #914b3d; background: rgba(248, 245, 238, 0.94); border: 1px solid #c7a99f; }

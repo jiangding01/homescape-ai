@@ -37,17 +37,28 @@
 ## PR #4 — Design State + Revision Engine
 
 - [x] DesignState
-- [x] DesignObject / Material / StyleIntent / Lock
 - [x] ResolvedDesignMutation
-- [x] Revision commit
-- [x] inverseMutations
-- [x] Undo / Redo
-- [x] Replay
-- [x] expectedParentRevisionId 乐观并发控制
+- [x] Undo / Redo / Replay
+- [x] 乐观并发控制
 - [x] Lock enforcement
 - [x] DesignState → RenderSnapshot
-- [x] Renderer Contract 移除 Planner 类型依赖
 - [x] Web Revision Demo
+
+## PR #5 — Catalog + Rule-based Planner
+
+- [x] CatalogAsset / CatalogRepository
+- [x] 精选客厅 Mock SKU
+- [x] 结构化硬过滤
+- [x] Wall / Center / Free Anchor
+- [x] Room / Zone boundary validation
+- [x] 2D OBB / SAT 家具碰撞
+- [x] Column collision
+- [x] Door / Opening clearance
+- [x] Lock / Preserve enforcement
+- [x] Add / Replace / Move / Rotate / Remove operation planning
+- [x] Planner → ResolvedDesignMutation
+- [x] 商品真实尺寸进入 RenderSnapshot
+- [x] Web 自动布置 / 局部替换 Demo
 
 ## P1 — Real Room Vertical Slice
 

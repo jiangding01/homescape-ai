@@ -1,20 +1,14 @@
-# HomeScape AI Architecture v0.4
+# HomeScape AI Architecture v0.5
 
 ## 1. 产品目标
 
-HomeScape AI 面向真实住宅空间，支持：
+HomeScape AI 面向真实住宅空间，将真实户型、自然语言、商品数据和空间约束统一为可持续编辑的设计状态。
 
-1. 将户型图、CAD、扫描等输入统一为 HomeSpatialModel。
-2. 根据风格和业主需求生成可编辑设计方案。
-3. 通过自然语言、GUI 和 3D 操作持续修改同一份 Design State。
-4. 在真实尺寸、商品、空间和业务约束下生成可执行方案。
-5. 使用实时 3D 提供秒级反馈，并保留高质量异步渲染能力。
-
-## 2. 总体架构
+## 2. 当前核心链路
 
 ~~~text
 Interaction
-文本 / 语音 / GUI / 3D
+文本 / GUI / 3D
         │
         ▼
 Design Request + Scope
@@ -26,7 +20,11 @@ AI Capability Runtime
 DesignOperation[]
         │
         ▼
-Catalog + Planner + Constraint
+Structured Catalog
+        │
+        ▼
+Rule-based Planner
+Anchor + Collision + Constraint + Scoring
         │
         ▼
 ResolvedDesignMutation[]
@@ -68,67 +66,84 @@ Canonical：meter、right-handed、Y-up。
 - headRevisionId
 - state version
 
-住宅几何与设计方案不混在一个 Scene JSON 中。
-
 ## 4. Operation、Mutation 与 Revision
 
-DesignOperation 表达用户 / AI 的语义意图，例如：
+DesignOperation 表达用户 / AI 语义意图。
+
+ResolvedDesignMutation 是 Catalog / Planner / Domain 确认后可执行的状态变化。
+
+Revision 同时保存 Operation、Mutation 与 inverseMutation，因此 Undo / Redo / Replay 使用 Domain Engine，不依赖 React 状态快照。
+
+## 5. Catalog
+
+Catalog 是 Planner 的真实候选来源，而不是纯视觉素材目录。
 
 ~~~text
-replace sofa
-move object
-preserve tv cabinet
-lock object
+CatalogAsset
+├── sku / category / name
+├── dimensions
+├── variants
+├── style tags
+├── price / attributes
+└── placement rules
+    ├── anchors
+    ├── wall clearance
+    └── collision padding
 ~~~
 
-ResolvedDesignMutation 是经过 Catalog / Planner / Constraint 后可以确定执行的状态变化，例如：
+P1 先使用精选 Mock SKU 验证协议与算法；接真实商品数据时保持相同 Contract。
+
+检索顺序：
 
 ~~~text
-upsert_object
-move_object
-rotate_object
-set_material
-set_style_intent
-set_lock
+Hard structured filter
+品类 / 尺寸 / 座位 / 价格 / 颜色
+        ↓
+Semantic retrieval / rerank (future)
+        ↓
+Spatial feasibility
 ~~~
 
-Revision 同时保存 Operation 和 Mutation，使系统既能解释“用户想做什么”，也能审计“系统实际做了什么”。
+## 6. Rule-based Planner
 
-Commit 时自动生成 inverseMutations：
+P1 不让 AI 直接生成最终坐标。
+
+Planner 流程：
 
 ~~~text
-Revision
-├── operations
-├── mutations
-└── inverseMutations
+DesignOperation
+      ↓
+Resolve Scope
+      ↓
+Catalog Candidates
+      ↓
+Wall / Center / Free Anchors
+      ↓
+Room / Zone Boundary
+      ↓
+Furniture Collision
+      ↓
+Column Collision
+      ↓
+Door / Opening Clearance
+      ↓
+Soft Score
+      ↓
+ResolvedDesignMutation
 ~~~
 
-因此 Undo / Redo / Replay 使用 Domain Engine，而不是依赖 React / Zustand 快照。
+家具 footprint 使用 2D oriented rectangle，碰撞采用 SAT。
 
-## 5. Revision 并发模型
+Replace 优先保留原 Transform，只有尺寸/约束不满足才重新布局。
 
-客户端提交 RevisionDraft 时携带 expectedParentRevisionId。
+## 7. Lock / Preserve
 
-~~~text
-client expected head == server current head
-          │
-     yes ─┴─ no
-      │      │
-    commit  conflict
-~~~
+- Lock：持久化 DesignState，跨请求阻止修改。
+- Preserve：只约束当前 Planner Request。
 
-这为未来 AI 长任务、多人设计和异步 Planner 留出乐观并发控制。
+## 8. Renderer
 
-## 6. Lock / Preserve
-
-- Lock：持久化到 DesignState，阻止后续修改。
-- Preserve：只约束当前请求，不永久锁定。
-
-用户说“电视柜先别动”和“以后别动这个电视柜”因此是两种不同领域语义。
-
-## 7. Renderer
-
-Renderer 不依赖 Planner，不解释 Revision。
+Renderer 不依赖 Planner，也不解释 Revision。
 
 ~~~text
 HomeSpatialModel + DesignState
@@ -140,32 +155,26 @@ HomeSpatialModel + DesignState
        Renderer Adapter
 ~~~
 
-Babylon.js 是当前 P1 Adapter，最终 Runtime 仍需 Whole-home Benchmark。
+RenderObject 已携带商品 dimensions，当前 Babylon 占位几何按真实尺寸显示。未来替换 GLB 不改变 Domain Contract。
 
-## 8. Planner
+## 9. 下一阶段 AI Runtime
 
-下一阶段将建立 Catalog + Planner：
+下一步将把自然语言解释接入已经存在的 AI Capability Runtime：
 
 ~~~text
-DesignOperation
-      ↓
-Catalog Candidate
-      ↓
-Anchor Generation
-      ↓
-Hard Constraint Filter
-      ↓
-Scoring / Ranking
-      ↓
-ResolvedDesignMutation
+"沙发小一点，换浅灰色，其他地方别动"
+                    ↓
+           Scope / Intent Decision
+                    ↓
+DesignOperation[]
+- replace sofa
+- preserve other objects
+                    ↓
+               Planner
 ~~~
 
-P1 先使用 Rule + Anchor + Collision + Scoring，复杂度达到门槛后再评估 CP-SAT。
-
-## 9. AI 边界
-
-业务依赖 Capability，不依赖 Vendor。JEV 可作为 typed_decision primary，但不能直接写 DesignState。
+JEV 可作为 typed_decision primary，但 AI 永远不直接写 DesignState。
 
 ## 10. 后续基础设施
 
-按需求逐步引入 PostgreSQL、Object Storage/CDN、Redis、Durable Workflow、OpenTelemetry 与 Yjs；均不阻塞首个 Vertical Slice。
+按需求逐步引入 PostgreSQL、Object Storage/CDN、Redis、Durable Workflow、OpenTelemetry 与 Yjs。
