@@ -45,14 +45,14 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
     imageExport: true,
   }
 
-  private engine?: Engine
-  private scene?: Scene
-  private camera?: ArcRotateCamera
-  private canvas?: HTMLCanvasElement
-  private resizeObserver?: ResizeObserver
-  private spatialRoot?: TransformNode
-  private materials?: RendererMaterials
-  private snapshot?: RenderSnapshot
+  private engine: Engine | undefined
+  private scene: Scene | undefined
+  private camera: ArcRotateCamera | undefined
+  private canvas: HTMLCanvasElement | undefined
+  private resizeObserver: ResizeObserver | undefined
+  private spatialRoot: TransformNode | undefined
+  private materials: RendererMaterials | undefined
+  private snapshot: RenderSnapshot | undefined
 
   async mount(target: HTMLElement) {
     if (this.engine) {
