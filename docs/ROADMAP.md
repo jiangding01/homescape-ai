@@ -8,9 +8,24 @@
 - [x] AI Capability Runtime contract
 - [x] Planner contract
 - [x] Renderer contract
+- [x] CI 基础链路
 - [ ] 首次 pnpm lockfile
 - [ ] 基础单元测试
-- [ ] CI 全绿
+
+## PR #2 — HomeSpatialModel Core
+
+- [x] Canonical meter / right-handed / Y-up 约定
+- [x] Room / Zone / Wall / Opening
+- [x] Column / Beam
+- [x] Utility Anchor
+- [x] Room Connection / Room Graph
+- [x] provenance / confidence
+- [x] Spatial Importer contract
+- [x] unresolved issue contract
+- [x] 空间模型统一校验
+- [x] 真实尺度多空间 fixture
+- [x] 2D Debug View
+- [ ] 真实户型图片解析器
 
 ## P1 — Real Room Vertical Slice
 
