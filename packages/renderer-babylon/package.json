@@ -6,6 +6,7 @@
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
     "@babylonjs/core": "9.27.1",
+    "@babylonjs/loaders": "9.27.1",
     "@homescape/domain": "workspace:*",
     "@homescape/renderer-contract": "workspace:*",
     "@homescape/spatial-model": "workspace:*"

@@ -1,153 +1,159 @@
-# HomeScape AI Architecture v0.8
+# HomeScape AI Architecture v0.9
 
 ## 1. 当前端到端闭环
 
 ~~~text
-Real Floor Plan / Company Data
-        ↓
-FloorPlanDraft / SpatialImporter
-        ↓
-HomeSpatialModel Candidate
-        ↓
-Validation + Human Review
-        ↓
-Finalize HomeSpatialModel
-        ↓
-Active Workspace
-        ├── DesignState
-        ├── AI Context
-        ├── Catalog + Planner
-        └── RenderSnapshot
-                ↓
-Natural Language / GUI
-        ↓
-AI Capability Runtime
-        ↓
-Design Intelligence
-        ↓
-DesignOperation[]
-        ↓
-Rule-based Planner
-        ↓
-ResolvedDesignMutation[]
-        ↓
-Revision Engine
-        ↓
-DesignState
-        ↓
-Interactive 3D
-~~~
-
-PR #8 的核心变化是：Finalize 不再只是“得到一个模型”，而是把该模型切换成当前设计会话唯一的 Active HomeSpatialModel。
-
-## 2. Active Workspace
-
-Web Vertical Slice 当前维护一组必须一致的运行时状态：
-
-- Active HomeSpatialModel
-- DesignState.spatialModelId
-- Active Room
-- Revision Timeline
-- Planner input
-- AI command context
-- RenderSnapshot
-
-切换空间模型时不会迁移旧 DesignObject。系统会创建新的空 DesignState 与 Revision Timeline，因为旧家具坐标、Room ID、Zone ID 和约束结果不能安全地假定对新空间仍然有效。
-
-默认设计房间按以下确定性顺序选择：
-
-~~~text
-living
-→ dining
-→ largest room by polygon area
-~~~
-
-后续可以把这个策略升级成用户显式选择 Room / Zone，但不应让 LLM 隐式决定当前编辑上下文。
-
-## 3. 并发与状态一致性
-
-Planner 是异步的。
-
-如果在 Planner 执行期间切换 HomeSpatialModel，旧结果可能在新 Timeline 上落盘。因此 PR #8 引入 workspace epoch：
-
-~~~text
-plan starts at epoch N
-        ↓
-async planning
-        ↓
-commit only if current epoch === N
-and current DesignState.spatialModelId === planned model.id
-and current revision head === expected head
-~~~
-
-同时 Import Workbench 在 planning / interpreting 期间禁用 Finalize，形成 UI Gate + Runtime Gate 双保险。
-
-## 4. Source of Truth
-
-HomeSpatialModel 描述住宅本体：
-
-- Floor / Room / Zone
-- Wall / Opening
-- Column / Beam
-- UtilityAnchor
-- RoomConnection
-- provenance / confidence
-
-Canonical：meter、right-handed、Y-up。
-
-DesignState 只描述设计叠加。Render Scene 仍然只是 View。
-
-## 5. Real Floor Plan Import
-
-FloorPlanDraft 是解析器与 HomeSpatialModel 之间的过渡协议，不是长期真值。
-
-不确定信息进入 unresolved，经 Human Review / Correction 解决。只有 Validation 通过且所有 requiresHumanReview 已解决，才能 Finalize。
-
-## 6. AI Runtime
-
-AI 仍不直接修改 Scene 或 DesignState。
-
-JEV typed_decision 接收到的 activeRoom 来自 Active Workspace，而不是固定 room-living。这样同一套 Design Intelligence 可以作用在导入户型的真实 Room ID 上。
-
-## 7. Planner
-
-Planner 的 spatialModel 与 DesignState.spatialModelId 必须指向同一 Active Workspace。
-
-所有 Add / Replace / Move / Rotate 继续经过：
-
-~~~text
-Catalog hard filter
-→ candidate generation
-→ room / zone boundary
-→ collision
-→ column / opening clearance
-→ scoring
-→ mutation
-~~~
-
-## 8. Renderer
-
-RenderSnapshot 在创建时验证：
-
-~~~text
-spatialModel.id === designState.spatialModelId
-~~~
-
-因此模型切换后，Babylon Runtime、2D Debug View、Planner 与 AI Context 都消费同一份 Active HomeSpatialModel。
-
-## 9. 下一阶段
-
-P1 的结构闭环已经成立。下一优先级是 Real Asset Pipeline：
-
-~~~text
-真实 SKU Source
-→ asset normalization
-→ GLB / glTF
-→ LOD
-→ Meshopt / KTX2
-→ dimensions / footprint / anchors
-→ CatalogAsset
+Real Floor Plan
+→ Candidate + Human Review
+→ Active HomeSpatialModel
+→ Natural Language
+→ DesignOperation[]
+→ Catalog + Planner
+→ DesignState / Revision
+→ RenderSnapshot
+      ├── Spatial Model
+      ├── Object Transform
+      └── Render Asset Source
 → Babylon Runtime
 ~~~
 
-Whole-home Runtime Benchmark 与真实 Floor Plan Extractor 继续作为并行 Technical Spike。
+PR #9 新增的原则是：**空间几何真值、商品业务真值与视觉模型资产继续分离。**
+
+## 2. 三类真值
+
+### HomeSpatialModel
+
+房屋本体：Room / Wall / Opening / Structure / Utility。
+
+### CatalogAsset
+
+商品业务与空间约束真值：
+
+- SKU
+- width / height / depth
+- category
+- price
+- variants
+- placement rules
+- render asset manifest
+
+Planner 只依赖这里的真实尺寸与规则。
+
+### Render Asset
+
+视觉表达，不反向决定业务尺寸。
+
+标准化资产必须满足：
+
+~~~text
+unit              = meter
+coordinateSystem  = right-handed-y-up
+pivot             = floor-center
+~~~
+
+运行时不允许通过“看起来差不多”自动猜厘米、毫米、Z-up 或 Pivot。
+
+## 3. Asset Manifest
+
+CatalogRenderAsset 当前包含：
+
+- version
+- normalization contract
+- LOD list
+- format: glTF / GLB
+- URI
+- optional byteSize / contentHash
+- compression metadata
+
+P1 已支持 LOD manifest，但 Babylon 当前选择最小 level 作为 LOD0。动态 LOD 选择在后续整屋性能阶段实现。
+
+## 4. Catalog Validation
+
+Catalog 初始化时验证：
+
+- ID / SKU 唯一
+- dimensions 为正数
+- Render Asset normalization contract
+- LOD level 唯一
+- 资产 URI 仅允许站内绝对路径或 HTTPS
+- byteSize（若存在）为正整数
+
+错误 Catalog 不进入 Planner / Renderer。
+
+## 5. RenderSnapshot Asset Resolver
+
+Domain 的 DesignObject 仍只保存 assetId / variantId，不保存 Babylon 或 URL。
+
+~~~text
+DesignObject.assetId
+      ↓
+Render Asset Resolver
+      ↓
+RenderSnapshot.renderAsset
+      ↓
+Renderer Adapter
+~~~
+
+这样 Domain 不依赖 Catalog 的视觉实现，Renderer Contract 也不依赖 Catalog package。
+
+## 6. Babylon Asset Runtime
+
+Babylon Adapter 使用 AssetContainer：
+
+~~~text
+Render Asset URI
+→ LoadAssetContainer
+→ cache by version + URI
+→ instantiate per DesignObject
+→ parent to object transform
+~~~
+
+同一 SKU 多次出现时不重复下载/解析源文件。
+
+如果模型不存在或加载失败：
+
+~~~text
+Catalog dimensions
+→ deterministic Box Proxy
+~~~
+
+视觉失败不能破坏 Planner、Revision 或整个 3D Scene。
+
+## 7. Async Safety
+
+每次 sync 都生成单调 generation。
+
+资产异步加载完成后，只有 generation 和 spatialRoot 仍属于本次 sync 才允许实例化，避免旧 Revision 的慢请求污染新场景。
+
+## 8. 当前 Demo Asset
+
+PR #9 提交 7 个本地、自包含、已按规范归一化的 glTF Demo Asset，用来真实验证：
+
+- glTF Loader
+- AssetContainer cache
+- 多实例
+- transform
+- material
+- fallback
+
+这些资产是 Pipeline Fixture，不宣称为公司生产 SKU。
+
+## 9. Production Pipeline
+
+下一阶段：
+
+~~~text
+Company SKU Source
+→ source validation
+→ unit / axis / pivot normalize
+→ mesh cleanup
+→ dimension QA
+→ LOD generation
+→ Meshopt
+→ KTX2
+→ manifest + version + hash
+→ CDN publish
+→ CatalogAsset
+~~~
+
+生产资产必须在离线阶段被拒绝或修复，不应把模型质量问题推给浏览器 Runtime。

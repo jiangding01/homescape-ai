@@ -97,6 +97,23 @@
 - [x] 导入 Review 在设计任务执行期间禁止 Finalize
 - [x] 一键切回示例空间
 
+## PR #9 — Real Asset Pipeline
+
+- [x] CatalogRenderAsset contract
+- [x] meter / right-handed-y-up / floor-center normalization contract
+- [x] LOD manifest contract
+- [x] Catalog validation：dimensions / URI / duplicate ID / duplicate SKU
+- [x] RenderSnapshot Asset Resolver
+- [x] Babylon glTF / GLB AssetContainer loader
+- [x] AssetContainer cache + per-object instantiation
+- [x] 异步 sync generation 防止旧资产写入新 Scene
+- [x] 加载失败时按 Catalog dimensions 降级尺寸代理
+- [x] 7 个本地 normalized demo glTF 资产
+- [ ] 公司真实 SKU GLB 入库
+- [ ] 自动 Meshopt / KTX2 压缩流水线
+- [ ] 多级 LOD 生成与运行时距离选择
+- [ ] 资产几何尺寸自动 QA / 阻断
+
 ## P1 — Real Room Vertical Slice
 
 目标：证明真实产品价值，而不是完成整个平台。
@@ -112,14 +129,15 @@
 - [x] Undo / Redo / Revision
 - [x] AI 调试信息
 - [x] Finalized Import → 现有 3D Workbench 切换
-- [ ] 真实资产 GLB
+- [x] glTF / GLB 真实加载链路
+- [ ] 公司真实 SKU GLB
 - [ ] 真实户型自动 Extractor
 
 ## 下一阶段候选
 
-### PR #9 — Real Asset Pipeline
+### PR #10 — Production Asset Ingestion
 
-用真实 GLB / glTF 商品资产替换当前几何代理，并建立尺寸、LOD、材质、KTX2 / Meshopt 与 CatalogAsset 的稳定映射。
+把公司真实 SKU 模型接入标准化流水线，并补齐离线 Geometry QA、LOD、Meshopt / KTX2 与资产版本发布。
 
 ### Technical Spikes
 

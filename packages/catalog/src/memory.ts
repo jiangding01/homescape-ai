@@ -3,6 +3,7 @@ import type {
   CatalogQuery,
   CatalogRepository,
 } from './types'
+import { assertCatalogAssetsValid } from './validation'
 
 function numericAttribute(asset: CatalogAsset, key: string) {
   const value = asset.attributes?.[key]
@@ -13,6 +14,7 @@ export class InMemoryCatalog implements CatalogRepository {
   private readonly assets: readonly CatalogAsset[]
 
   constructor(assets: readonly CatalogAsset[]) {
+    assertCatalogAssetsValid(assets)
     this.assets = [...assets]
   }
 

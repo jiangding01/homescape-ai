@@ -20,6 +20,29 @@ export interface CatalogPlacementRules {
   allowRotation: boolean
 }
 
+export type CatalogModelFormat = 'glb' | 'gltf'
+
+export interface CatalogRenderAssetLod {
+  level: 0 | 1 | 2
+  uri: string
+  format: CatalogModelFormat
+  byteSize?: number
+  contentHash?: string
+}
+
+export interface CatalogRenderAsset {
+  version: string
+  unit: 'meter'
+  coordinateSystem: 'right-handed-y-up'
+  pivot: 'floor-center'
+  lods: readonly CatalogRenderAssetLod[]
+  compression?: {
+    meshopt?: boolean
+    ktx2?: boolean
+    draco?: boolean
+  }
+}
+
 export interface CatalogAsset {
   id: string
   sku: string
@@ -32,6 +55,7 @@ export interface CatalogAsset {
   price?: number
   variants?: readonly CatalogVariant[]
   attributes?: Readonly<Record<string, string | number | boolean>>
+  renderAsset?: CatalogRenderAsset
 }
 
 export interface CatalogQuery {

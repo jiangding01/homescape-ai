@@ -3,6 +3,9 @@ import { Engine } from '@babylonjs/core/Engines/engine'
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight'
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial'
+import type { AssetContainer } from '@babylonjs/core/assetContainer'
+import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader'
+import '@babylonjs/loaders/glTF'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector'
 import { Mesh } from '@babylonjs/core/Meshes/mesh'
@@ -12,6 +15,7 @@ import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData'
 import { Scene } from '@babylonjs/core/scene'
 import type { DesignScope } from '@homescape/domain'
 import type {
+  RenderObject,
   RenderSnapshot,
   RendererCapabilities,
   SceneRendererAdapter,
@@ -42,6 +46,7 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
     webgl: true,
     webgpu: false,
     imageExport: true,
+    gltfAssets: true,
   }
 
   private engine: Engine | undefined
@@ -52,6 +57,11 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
   private spatialRoot: TransformNode | undefined
   private materials: RendererMaterials | undefined
   private snapshot: RenderSnapshot | undefined
+  private readonly assetContainerCache = new Map<
+    string,
+    Promise<AssetContainer>
+  >()
+  private syncGeneration = 0
 
   async mount(target: HTMLElement) {
     if (this.engine) {
@@ -150,6 +160,8 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
   async sync(snapshot: RenderSnapshot) {
     const scene = this.requireScene()
     const materials = this.requireMaterials()
+    const generation = this.syncGeneration + 1
+    this.syncGeneration = generation
 
     this.snapshot = snapshot
     this.spatialRoot?.dispose()
@@ -161,30 +173,23 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
       this.renderFloor(floor, root, scene, materials)
     }
 
-    for (const object of snapshot.objects) {
-      const dimensions = object.dimensions ?? ([0.72, 0.72, 0.72] as const)
-      const proxy = MeshBuilder.CreateBox(
-        'planned-object-' + object.id,
-        {
-          width: dimensions[0],
-          height: dimensions[1],
-          depth: dimensions[2],
-        },
-        scene,
-      )
-      proxy.position = new Vector3(
-        object.position[0],
-        object.position[1] + dimensions[1] / 2,
-        object.position[2],
-      )
-      proxy.rotation.y = object.yaw
-      proxy.material = materials.object
-      proxy.parent = root
-      proxy.metadata = {
-        homescapeType: 'planned-object',
-        objectId: object.id,
-        assetId: object.assetId,
-      }
+    await Promise.all(
+      snapshot.objects.map((object) =>
+        this.renderDesignObject(
+          object,
+          root,
+          scene,
+          materials,
+          generation,
+        ),
+      ),
+    )
+
+    if (
+      generation !== this.syncGeneration ||
+      root !== this.spatialRoot
+    ) {
+      return
     }
 
     await this.focus({
@@ -285,10 +290,20 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
   }
 
   async dispose() {
+    this.syncGeneration += 1
     this.resizeObserver?.disconnect()
     this.resizeObserver = undefined
     this.snapshot = undefined
+    this.spatialRoot?.dispose()
     this.spatialRoot = undefined
+
+    const containers = [...this.assetContainerCache.values()]
+    this.assetContainerCache.clear()
+    const settledContainers = await Promise.allSettled(containers)
+
+    for (const result of settledContainers) {
+      if (result.status === 'fulfilled') result.value.dispose()
+    }
     this.materials = undefined
     this.camera = undefined
     this.scene?.dispose()
@@ -297,6 +312,151 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
     this.engine = undefined
     this.canvas?.remove()
     this.canvas = undefined
+  }
+
+  private async renderDesignObject(
+    object: RenderObject,
+    root: TransformNode,
+    scene: Scene,
+    materials: RendererMaterials,
+    generation: number,
+  ) {
+    if (!object.renderAsset) {
+      this.renderProxyObject(object, root, scene, materials.object)
+      return
+    }
+
+    const lod = [...object.renderAsset.lods].sort(
+      (a, b) => a.level - b.level,
+    )[0]
+
+    if (!lod) {
+      this.renderProxyObject(object, root, scene, materials.object)
+      return
+    }
+
+    try {
+      const container = await this.loadAssetContainer(
+        object.renderAsset.version + ':' + lod.uri,
+        lod.uri,
+        scene,
+      )
+
+      if (
+        generation !== this.syncGeneration ||
+        root !== this.spatialRoot
+      ) {
+        return
+      }
+
+      const objectRoot = new TransformNode(
+        'render-object-' + object.id,
+        scene,
+      )
+      objectRoot.position = new Vector3(
+        object.position[0],
+        object.position[1],
+        object.position[2],
+      )
+      objectRoot.rotation.y = object.yaw
+      objectRoot.parent = root
+      objectRoot.metadata = {
+        homescapeType: 'catalog-asset',
+        objectId: object.id,
+        assetId: object.assetId,
+        lod: lod.level,
+        uri: lod.uri,
+      }
+
+      const instantiated = container.instantiateModelsToScene(
+        (sourceName) => object.id + '-' + sourceName,
+        false,
+      )
+
+      for (const node of instantiated.rootNodes) {
+        node.parent = objectRoot
+      }
+    } catch (error) {
+      if (
+        generation !== this.syncGeneration ||
+        root !== this.spatialRoot
+      ) {
+        return
+      }
+
+      this.renderProxyObject(
+        object,
+        root,
+        scene,
+        materials.object,
+        error instanceof Error ? error.name : 'asset_load_failed',
+      )
+    }
+  }
+
+  private renderProxyObject(
+    object: RenderObject,
+    root: TransformNode,
+    scene: Scene,
+    material: StandardMaterial,
+    fallbackReason?: string,
+  ) {
+    const dimensions =
+      object.dimensions ?? ([0.72, 0.72, 0.72] as const)
+    const proxy = MeshBuilder.CreateBox(
+      'planned-object-' + object.id,
+      {
+        width: dimensions[0],
+        height: dimensions[1],
+        depth: dimensions[2],
+      },
+      scene,
+    )
+    proxy.position = new Vector3(
+      object.position[0],
+      object.position[1] + dimensions[1] / 2,
+      object.position[2],
+    )
+    proxy.rotation.y = object.yaw
+    proxy.material = material
+    proxy.parent = root
+    proxy.metadata = {
+      homescapeType: 'planned-object-proxy',
+      objectId: object.id,
+      assetId: object.assetId,
+      ...(fallbackReason ? { fallbackReason } : {}),
+    }
+  }
+
+  private async loadAssetContainer(
+    cacheKey: string,
+    uri: string,
+    scene: Scene,
+  ) {
+    const cached = this.assetContainerCache.get(cacheKey)
+    if (cached) return cached
+
+    const separator = uri.lastIndexOf('/')
+    const rootUrl = separator >= 0 ? uri.slice(0, separator + 1) : ''
+    const fileName = separator >= 0 ? uri.slice(separator + 1) : uri
+
+    if (!fileName) {
+      throw new Error('Render Asset URI 缺少文件名')
+    }
+
+    const pending = SceneLoader.LoadAssetContainerAsync(
+      rootUrl,
+      fileName,
+      scene,
+    )
+    this.assetContainerCache.set(cacheKey, pending)
+
+    try {
+      return await pending
+    } catch (error) {
+      this.assetContainerCache.delete(cacheKey)
+      throw error
+    }
   }
 
   private renderFloor(
