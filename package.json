@@ -26,6 +26,7 @@
     "floorplan:geometry:check-demo": "tsx tools/floorplan-geometry-smoke.ts",
     "floorplan:raster": "tsx tools/floorplan-raster-extract.ts",
     "floorplan:raster:batch": "node tools/floorplan-raster-batch.mjs",
+    "floorplan:raster:batch:check-demo": "node tools/floorplan-raster-batch-smoke.mjs",
     "floorplan:raster:check-demo": "tsx packages/floorplan-extractor/src/node/raster-smoke.ts"
   },
   "devDependencies": {
