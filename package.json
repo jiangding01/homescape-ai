@@ -18,7 +18,9 @@
     "floorplan:extract": "tsx tools/floorplan-extract.ts",
     "floorplan:extract-demo": "tsx tools/floorplan-extract.ts tools/fixtures/floorplan-structured/company-plan-a.json .floorplan-benchmark/structured-plan-a.json",
     "floorplan:corpus": "node tools/floorplan-corpus.mjs",
-    "floorplan:corpus:check-demo": "node tools/floorplan-corpus.mjs tools/fixtures/floorplan-benchmark/corpus.json --min-cases 2"
+    "floorplan:corpus:check-demo": "node tools/floorplan-corpus.mjs tools/fixtures/floorplan-benchmark/corpus.json --min-cases 2",
+    "floorplan:pilot": "node tools/floorplan-pilot.mjs",
+    "floorplan:pilot:check-demo": "node tools/floorplan-pilot.mjs tools/fixtures/floorplan-pilot/experiment.json --min-cases 2 --require-corpus-coverage --require-complete-review --require-complete-metadata"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

@@ -205,6 +205,31 @@
 - [ ] Room Polygon 增删顶点
 - [ ] 真实 30~50 Case Corpus
 
+## PR #14 — Real Corpus Pilot Evaluation Pipeline
+
+- [x] Pilot Experiment Manifest v0.1
+- [x] Corpus Manifest / Summary / Benchmark Join
+- [x] Dataset Fingerprint Consistency Gate
+- [x] Benchmark SHA-256
+- [x] Pilot Fingerprint
+- [x] Extraction Metadata Join
+- [x] Review Burden Join
+- [x] Review Duration / Edit Count Integrity Gate
+- [x] Corpus Case / Review Room-Opening Count Consistency
+- [x] Missing Benchmark Case Reporting
+- [x] Missing Review / Metadata Coverage Reporting
+- [x] Orphan Run Gate
+- [x] --min-cases Gate
+- [x] --require-corpus-coverage
+- [x] --require-complete-review
+- [x] --require-complete-metadata
+- [x] Extractor Aggregate
+- [x] p50 / p95 Human Review Duration
+- [x] Corpus Tag Slice Aggregate
+- [x] Synthetic Pilot Smoke Fixture
+- [ ] 去敏真实 10 Case Pilot
+- [ ] CV / Geometry Baseline 实际跑数
+
 ## P1 — Real Room Vertical Slice
 
 目标：证明真实产品价值，而不是完成整个平台。
@@ -227,18 +252,20 @@
 
 ## 下一阶段候选
 
-### PR #14 — Real Corpus Pilot + Geometry Baseline
+### PR #15 — First Real Geometry Baseline
 
-PR #13 已补齐人工 Ground Truth 标注 / 校正入口和 Review Burden 记录。
+PR #14 已把真实 Pilot 的数据 Join、完整性 Gate、结构指标、Human Review 与 Runtime Metadata 聚合链路固定下来。
 
-下一阶段应开始真实数据 Pilot，而不是继续扩充 Synthetic Fixture：
+下一步必须开始使用真实输入：
 
-1. 先准备 10 张去敏真实户型图，验证标注流程与字段定义
-2. 稳定后扩充到 30~50 张
-3. 导出 Ground Truth + Review Burden
-4. 若公司存在原始结构化户型数据，补 Company Raw Schema Mapper
-5. 接入第一个 CV / Geometry Baseline
-6. 再接 VLM / Hybrid 做同 Corpus 对比
+1. 准备第一批 10 张去敏真实户型图
+2. 用 PR #13 Workbench 完成 Ground Truth
+3. 跑 PR #12 Corpus Check 生成真实 datasetFingerprint
+4. 接第一个 CV / Geometry Baseline
+5. 生成 Candidate + Extraction Metadata
+6. 人工 Review 并导出 Burden
+7. 跑 PR #11 Benchmark + PR #14 Pilot Report
+8. 根据失败类型决定是否增加 VLM Semantic / Hybrid
 
 
 ### Technical Spikes

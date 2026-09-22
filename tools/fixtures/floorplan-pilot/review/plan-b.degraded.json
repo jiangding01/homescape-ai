@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "0.1.0",
+  "sourceLabel": "plan-b",
+  "sourceKind": "floorplan_image",
+  "startedAt": "2026-09-22T00:00:00.000Z",
+  "completedAt": "2026-09-22T00:02:06.000Z",
+  "durationMs": 126000,
+  "totalEdits": 13,
+  "editCounts": {
+    "roomVertexMoves": 5,
+    "roomMetadataEdits": 2,
+    "openingGeometryEdits": 3,
+    "calibrationEdits": 1,
+    "assumptionEdits": 1,
+    "resets": 1
+  },
+  "touchedRoomIds": [
+    "room-a",
+    "room-b",
+    "room-c"
+  ],
+  "roomCount": 5,
+  "openingCount": 6,
+  "sourceImage": {
+    "widthPx": 1200,
+    "heightPx": 900,
+    "aspectRatioCompatible": true
+  }
+}

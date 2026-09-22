@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "0.1.0",
+  "dataset": "fixture-corpus-smoke-v1",
+  "datasetFingerprint": "1111111111111111111111111111111111111111111111111111111111111111",
+  "corpusManifestPath": "corpus-manifest.json",
+  "corpusSummaryPath": "corpus-summary.json",
+  "benchmarkReportPath": "benchmark-report.json",
+  "runs": [
+    {
+      "caseId": "plan-a",
+      "extractorId": "reference-json",
+      "extractionMetadataPath": "metadata/plan-a.reference.json",
+      "reviewBurdenPath": "review/plan-a.reference.json",
+      "candidatePath": "candidates/reference-json/plan-a.json"
+    },
+    {
+      "caseId": "plan-b",
+      "extractorId": "reference-json",
+      "extractionMetadataPath": "metadata/plan-b.reference.json",
+      "reviewBurdenPath": "review/plan-b.reference.json",
+      "candidatePath": "candidates/reference-json/plan-b.json"
+    },
+    {
+      "caseId": "plan-a",
+      "extractorId": "degraded-json",
+      "extractionMetadataPath": "metadata/plan-a.degraded.json",
+      "reviewBurdenPath": "review/plan-a.degraded.json",
+      "candidatePath": "candidates/degraded-json/plan-a.json"
+    },
+    {
+      "caseId": "plan-b",
+      "extractorId": "degraded-json",
+      "extractionMetadataPath": "metadata/plan-b.degraded.json",
+      "reviewBurdenPath": "review/plan-b.degraded.json",
+      "candidatePath": "candidates/degraded-json/plan-b.json"
+    }
+  ]
+}

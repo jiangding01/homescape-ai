@@ -1,0 +1,209 @@
+{
+  "schemaVersion": "0.1.0",
+  "source": {
+    "kind": "floorplan_image",
+    "widthPx": 1080,
+    "heightPx": 840,
+    "sourceLabel": "reference-plan-a"
+  },
+  "calibration": {
+    "startPx": [
+      82,
+      759
+    ],
+    "endPx": [
+      682,
+      759
+    ],
+    "realDistanceMeters": 6
+  },
+  "assumptions": {
+    "wallThicknessMeters": 0.12,
+    "ceilingHeightMeters": 2.8,
+    "wallThicknessConfirmed": false,
+    "ceilingHeightConfirmed": false
+  },
+  "rooms": [
+    {
+      "id": "ref-a-1",
+      "name": "客餐厅",
+      "type": "living",
+      "boundaryPx": [
+        [
+          82,
+          421
+        ],
+        [
+          421,
+          421
+        ],
+        [
+          679,
+          421
+        ],
+        [
+          679,
+          759
+        ],
+        [
+          82,
+          759
+        ]
+      ],
+      "confidence": 0.97
+    },
+    {
+      "id": "ref-a-2",
+      "name": "卧室",
+      "type": "bedroom",
+      "boundaryPx": [
+        [
+          681,
+          421
+        ],
+        [
+          999,
+          421
+        ],
+        [
+          999,
+          759
+        ],
+        [
+          681,
+          759
+        ]
+      ],
+      "confidence": 0.95
+    },
+    {
+      "id": "ref-a-3",
+      "name": "厨房",
+      "type": "kitchen",
+      "boundaryPx": [
+        [
+          81,
+          121
+        ],
+        [
+          419,
+          121
+        ],
+        [
+          419,
+          419
+        ],
+        [
+          81,
+          419
+        ]
+      ],
+      "confidence": 0.94
+    },
+    {
+      "id": "ref-a-4",
+      "name": "走廊",
+      "type": "hallway",
+      "boundaryPx": [
+        [
+          421,
+          121
+        ],
+        [
+          679,
+          121
+        ],
+        [
+          679,
+          419
+        ],
+        [
+          421,
+          419
+        ]
+      ],
+      "confidence": 0.92
+    },
+    {
+      "id": "ref-a-5",
+      "name": "次卧",
+      "type": "bedroom",
+      "boundaryPx": [
+        [
+          681,
+          121
+        ],
+        [
+          999,
+          121
+        ],
+        [
+          999,
+          419
+        ],
+        [
+          681,
+          419
+        ]
+      ],
+      "confidence": 0.95
+    }
+  ],
+  "openings": [
+    {
+      "id": "ref-a-o1",
+      "roomId": "ref-a-1",
+      "edgeIndex": 1,
+      "kind": "opening",
+      "offsetPx": 49,
+      "widthPx": 121,
+      "heightMeters": 2.4,
+      "sillHeightMeters": 0,
+      "confidence": 0.95
+    },
+    {
+      "id": "ref-a-o2",
+      "roomId": "ref-a-3",
+      "edgeIndex": 1,
+      "kind": "door",
+      "offsetPx": 174,
+      "widthPx": 91,
+      "heightMeters": 2.1,
+      "swing": "sliding",
+      "confidence": 0.92
+    },
+    {
+      "id": "ref-a-o3",
+      "roomId": "ref-a-5",
+      "edgeIndex": 3,
+      "kind": "door",
+      "offsetPx": 104,
+      "widthPx": 91,
+      "heightMeters": 2.1,
+      "swing": "right",
+      "confidence": 0.89
+    },
+    {
+      "id": "ref-a-o4",
+      "roomId": "ref-a-1",
+      "edgeIndex": 3,
+      "kind": "window",
+      "offsetPx": 149,
+      "widthPx": 241,
+      "heightMeters": 1.8,
+      "sillHeightMeters": 0.7,
+      "confidence": 0.94
+    },
+    {
+      "id": "ref-a-o5",
+      "roomId": "ref-a-2",
+      "edgeIndex": 2,
+      "kind": "window",
+      "offsetPx": 56,
+      "widthPx": 208,
+      "heightMeters": 1.8,
+      "sillHeightMeters": 0.7,
+      "confidence": 0.93
+    }
+  ]
+}
