@@ -304,6 +304,20 @@
 
 PR #16 已把 PNG / JPEG 像素接入 Geometry Observation，并通过 Synthetic E2E 验证 Decoder → Detector → Reconstructor 链路。
 
+当前进度：
+
+- [x] Pilot 保留 Benchmark Failure Codes
+- [x] Extractor 级 Failure Summary
+- [x] Corpus Tag Slice Failure Summary
+- [x] Failure Slice Synthetic Regression Smoke
+- [ ] 准备第一批 10 张去敏真实户型图
+- [ ] 用 PR #13 Workbench 完成 Ground Truth
+- [ ] 跑 PR #12 Corpus Check 生成真实 datasetFingerprint
+- [ ] 用 PR #16 Raster Detector 生成 Candidate
+- [ ] 人工 Review + Burden
+- [ ] PR #11 Benchmark + PR #14 Pilot Report
+- [ ] 根据 Failure Slice 形成下一阶段技术决策记录
+
 下一阶段不应该继续扩 Synthetic Heuristic，而应拿真实数据验证：
 
 1. 准备第一批 10 张去敏真实户型图
