@@ -5,6 +5,7 @@ dist
 coverage
 .asset-release
 .floorplan-benchmark
+.floorplan-corpus
 .DS_Store
 .env
 .env.*

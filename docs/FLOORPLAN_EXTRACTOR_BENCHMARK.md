@@ -176,3 +176,28 @@ D. CV geometry + VLM semantics hybrid
 ~~~
 
 最终是否采用某个方案，要看真实 Corpus 上的结构指标、Review Burden、延迟、成本和失败模式，而不是单张 Demo 效果。
+
+## 与 Real Corpus 的衔接
+
+真实数据先通过：
+
+~~~bash
+pnpm floorplan:corpus -- \
+  .floorplan-corpus/corpus.json \
+  --min-cases 30 \
+  --report .floorplan-corpus/reports/corpus-summary.json
+~~~
+
+Corpus Summary 会生成 datasetFingerprint。
+
+后续任何 Extractor Benchmark 实验记录都应保存：
+
+- dataset
+- datasetFingerprint
+- extractorId
+- provider / model version
+- Candidate 生成时间
+- latency / token / cost（若适用）
+- Benchmark Report
+
+这样结果才具备可回归性。

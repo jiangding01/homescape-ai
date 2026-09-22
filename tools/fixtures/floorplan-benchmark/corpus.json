@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "0.1.0",
+  "dataset": "fixture-corpus-smoke-v1",
+  "cases": [
+    {
+      "id": "plan-a",
+      "sourceKind": "floorplan_image",
+      "mediaType": "image/svg+xml",
+      "sourcePath": "sources/plan-a.svg",
+      "groundTruthPath": "ground-truth/plan-a.json",
+      "tags": {
+        "quality": "clean",
+        "geometry": "rectangular",
+        "annotation": "partial_dimension",
+        "layout": "multi_room",
+        "symbols": "standard",
+        "textDensity": "normal"
+      }
+    },
+    {
+      "id": "plan-b",
+      "sourceKind": "floorplan_image",
+      "mediaType": "image/svg+xml",
+      "sourcePath": "sources/plan-b.svg",
+      "groundTruthPath": "ground-truth/plan-b.json",
+      "tags": {
+        "quality": "clean",
+        "geometry": "rectangular",
+        "annotation": "partial_dimension",
+        "layout": "open_plan",
+        "symbols": "standard",
+        "textDensity": "normal"
+      }
+    }
+  ]
+}
