@@ -312,6 +312,8 @@ PR #16 已把 PNG / JPEG 像素接入 Geometry Observation，并通过 Synthetic
 - [x] Failure Slice Synthetic Regression Smoke
 - [x] Real Corpus Raster Batch Runner
 - [x] Batch Runner 先执行 Corpus Gate 并记录 datasetFingerprint
+- [x] 自动生成 Benchmark Manifest / Pilot Experiment Manifest
+- [x] Benchmark CLI 支持真实 Manifest，并保留独立 Synthetic Smoke
 - [ ] 准备第一批 10 张去敏真实户型图
 - [ ] 用 PR #13 Workbench 完成 Ground Truth
 - [ ] 跑 PR #12 Corpus Check 生成真实 datasetFingerprint
