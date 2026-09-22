@@ -500,11 +500,25 @@ function validateBenchmarkReport(value, dataset, corpusCases) {
     }
     seen.add(key)
 
+    const failures = result.failures ?? []
+
+    if (!Array.isArray(failures)) {
+      throw new Error(label + '.failures 必须是数组')
+    }
+
+    const normalizedFailures = failures.map((failure, failureIndex) =>
+      nonEmptyString(
+        failure,
+        label + '.failures[' + failureIndex + ']',
+      ),
+    )
+
     results.push({
       caseId,
       extractorId,
       gatePass: result.gatePass,
       metrics: validateMetrics(result.metrics, label),
+      failures: normalizedFailures,
     })
   }
 
@@ -859,6 +873,34 @@ function extractionSummary(results) {
   }
 }
 
+function failureSummary(results) {
+  const counts = new Map()
+  let failedCaseCount = 0
+  let totalFailureCount = 0
+
+  for (const result of results) {
+    if ((result.failures?.length ?? 0) > 0) {
+      failedCaseCount += 1
+    }
+
+    for (const failure of result.failures ?? []) {
+      counts.set(failure, (counts.get(failure) ?? 0) + 1)
+      totalFailureCount += 1
+    }
+  }
+
+  return {
+    failedCaseCount,
+    totalFailureCount,
+    failureCounts: Object.fromEntries(
+      [...counts.entries()].sort(
+        (left, right) =>
+          right[1] - left[1] || left[0].localeCompare(right[0]),
+      ),
+    ),
+  }
+}
+
 function sliceSummary(results) {
   const reviews = results
     .map((result) => result.review)
@@ -888,6 +930,7 @@ function sliceSummary(results) {
     meanTotalEdits: mean(
       reviews.map((review) => review.totalEdits),
     ),
+    failures: failureSummary(results),
   }
 }
 
