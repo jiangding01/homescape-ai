@@ -15,8 +15,9 @@ interface FixtureRect {
 }
 
 const fixtureRects: readonly FixtureRect[] = [
-  { x: 65, y: 65, width: 235, height: 11 },
-  { x: 420, y: 65, width: 316, height: 11 },
+  // 顶部开口必须完全落在单个 Room Edge 内，不能跨越 x=400 的房间分隔墙交点。
+  { x: 65, y: 65, width: 155, height: 11 },
+  { x: 340, y: 65, width: 396, height: 11 },
   { x: 65, y: 525, width: 435, height: 11 },
   { x: 620, y: 525, width: 116, height: 11 },
 
@@ -238,7 +239,8 @@ async function main() {
         testCase.label +
           ' Opening 数不匹配：' +
           result.draft.openings.length +
-          ' != 6',
+          ' != 6；warnings=' +
+          (result.warnings?.join(' | ') ?? 'none'),
       )
     }
 
