@@ -1,4 +1,4 @@
-# HomeScape AI Architecture v0.14
+# HomeScape AI Architecture v0.15
 
 ## 1. 当前端到端闭环
 
@@ -7,7 +7,7 @@ Real Floor Plan / PDF / Company Data
         ↓
 Floor Plan Extractor Layer
         ├── Metric Structured Baseline
-        ├── future CV Geometry
+        ├── Geometry Detector → Orthogonal Reconstructor
         ├── future VLM
         └── future Hybrid
         ↓
@@ -432,4 +432,165 @@ Cost
 
 PR #14 仍不根据 Synthetic Fixture 得出 CV / VLM 结论。
 
-Geometry Baseline 的算法实现和参数冻结应在第一批真实 10 Case 到位后进行，避免针对演示图形过拟合。
+PR #14 当时没有实现 Geometry Algorithm；PR #15 只建立 Vendor-neutral 的确定性 Reconstruction Baseline，并保持参数为 provisional。真正参数冻结、Detector 选型与适用范围仍必须等第一批真实 10 Case 跑数后决定，避免针对演示图形过拟合。
+
+
+## 15. Geometry Detector / Reconstructor Split
+
+PR #15 增加第一个确定性 Geometry Baseline，但刻意不把“像素检测”和“空间重建”写成一个大 Extractor。
+
+~~~text
+Raw Floor Plan Image / PDF
+        ↓
+FloorPlanGeometryDetector
+        ↓
+Geometry Observation v0.1
+  ├── source dimensions
+  ├── calibration
+  ├── wall segments
+  ├── room seeds
+  └── openings
+        ↓
+OrthogonalGeometryReconstructor
+        ↓
+FloorPlanDraft
+        ↓
+Benchmark / Human Review / Importer
+~~~
+
+### 为什么拆成两层
+
+真实户型识别里存在两类完全不同的问题：
+
+1. Perception：从 PNG / JPEG / PDF 中找到墙线、房间语义、门窗和尺寸；
+2. Reconstruction：把不稳定的观测转成闭合、无重叠、可编辑的结构。
+
+如果二者绑死：
+
+~~~text
+OpenCV Algorithm
+→ 直接写 FloorPlanDraft
+~~~
+
+后续切换 VLM、CV Model、公司视觉服务时，Room Polygon / Opening Mapping / Grid Topology 会被重复实现。
+
+因此 HomeScape 固定：
+
+~~~text
+Detector = 可替换感知层
+Reconstructor = 确定性几何层
+~~~
+
+### Geometry Observation v0.1
+
+当前 Observation 包含：
+
+~~~text
+source
+calibration
+assumptions?
+walls[]
+roomSeeds[]
+openings[]
+~~~
+
+Observation 不是 HomeSpatialModel，也不是最终 Ground Truth。它保留感知层的不确定结果，由确定性 Reconstructor 与 Human Review 收口。
+
+### Orthogonal Geometry Baseline
+
+PR #15 的第一版算法面向大量常见正交住宅平面：
+
+~~~text
+Wall Segment
+→ near-axis normalize
+→ X / Y coordinate clustering
+→ blocked-edge grid
+→ Room Seed flood fill
+→ cell union boundary tracing
+→ collinear simplification
+→ Room Polygon
+~~~
+
+支持矩形 Room、L-shape 正交 Polygon、共享墙以及轻微墙线抖动。
+
+当前明确不支持任意斜墙、曲线墙、Room Polygon holes，以及没有 Room Seed 的纯拓扑语义分区。Grid Bounding Box 目前也是计算域边界，因此外轮廓缺墙不会自动被当作 Exterior Leak；这类问题必须由真实 Benchmark / Human Review 暴露，后续如有必要再引入 explicit exterior seed / outline contract。
+
+非正交墙线不会被静默当成正交墙，而是产生 Warning；可用正交墙不足时直接失败。
+
+### Room Seed
+
+Room Seed 是感知层对“这个连通空间里存在一个 Room”的最小语义提示。
+
+~~~text
+wall topology
++
+one seed per connected room
+        ↓
+room polygon
+~~~
+
+如果两个 Seed 落入同一个 Flood Fill 连通域，Reconstructor 直接报错。
+
+Open-plan living / dining 后续应优先建模为 one Room + multiple Zone，而不是人为制造重叠 Room。
+
+### Opening Mapping
+
+Opening Observation 使用 centerPx / widthPx / orientation / optional roomSeedId。
+
+Reconstructor 在 Room Boundary 上寻找方向一致、距离最近且 Width 可容纳的 Edge，然后转换为 roomId / edgeIndex / offsetPx / widthPx。
+
+没有 roomSeedId 时，如果多个 Room Edge 同样接近，会输出 ambiguity Warning。
+
+Opening 高度或窗台高度缺失时可以使用 Baseline Default，但必须进入 Warning；wall / ceiling assumption 仍保持未确认状态。
+
+### Composed Extractor
+
+FloorPlanGeometryDetector 可以被组合成正式 FloorPlanExtractor：
+
+~~~text
+Detector
++
+OrthogonalGeometryReconstructor
+=
+GeometryFloorPlanExtractor
+~~~
+
+Detector 返回的数据即使在 TypeScript 上声明为 Geometry Observation，运行时仍再次经过 Schema Validation。
+
+核心原则仍然是：
+
+> AI / CV / VLM 输出永远是 Untrusted Proposal。
+
+### CLI
+
+~~~bash
+pnpm floorplan:geometry -- \
+  observation.json \
+  candidate.json \
+  --metadata candidate.meta.json
+~~~
+
+Smoke：
+
+~~~bash
+pnpm floorplan:geometry:check-demo
+~~~
+
+当前 Smoke 包含五房间平面 A、五房间错层边界平面 B 和一个 L-shape Room。它们只验证 Reconstruction，不代表真实图像检测效果。
+
+### 下一边界
+
+真正下一步是：
+
+~~~text
+PNG / JPEG
+→ Raw Image Geometry Detector
+→ Geometry Observation
+→ PR #15 Reconstructor
+→ Candidate
+→ PR #11 Benchmark
+→ PR #13 Human Review
+→ PR #14 Pilot
+~~~
+
+第一批真实 10 Case 到位后，Detector 的参数、失败分类和是否需要 VLM / OCR 才有意义。

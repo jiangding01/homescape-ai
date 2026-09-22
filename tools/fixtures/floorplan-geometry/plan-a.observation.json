@@ -1,0 +1,234 @@
+{
+  "schemaVersion": "0.1.0",
+  "source": {
+    "kind": "floorplan_image",
+    "sourceLabel": "geometry-plan-a",
+    "widthPx": 1080,
+    "heightPx": 840
+  },
+  "calibration": {
+    "startPx": [
+      82,
+      759
+    ],
+    "endPx": [
+      682,
+      759
+    ],
+    "realDistanceMeters": 6,
+    "confidence": 0.99
+  },
+  "assumptions": {
+    "wallThicknessMeters": 0.12,
+    "ceilingHeightMeters": 2.8
+  },
+  "walls": [
+    {
+      "id": "wa-top",
+      "startPx": [
+        82,
+        121
+      ],
+      "endPx": [
+        999,
+        121
+      ],
+      "confidence": 0.99
+    },
+    {
+      "id": "wa-bottom",
+      "startPx": [
+        82,
+        759
+      ],
+      "endPx": [
+        999,
+        759
+      ],
+      "confidence": 0.99
+    },
+    {
+      "id": "wa-left",
+      "startPx": [
+        82,
+        121
+      ],
+      "endPx": [
+        82,
+        759
+      ],
+      "confidence": 0.99
+    },
+    {
+      "id": "wa-right",
+      "startPx": [
+        999,
+        121
+      ],
+      "endPx": [
+        999,
+        759
+      ],
+      "confidence": 0.99
+    },
+    {
+      "id": "wa-mid-h",
+      "startPx": [
+        82,
+        420
+      ],
+      "endPx": [
+        999,
+        420
+      ],
+      "confidence": 0.98
+    },
+    {
+      "id": "wa-mid-v1",
+      "startPx": [
+        420,
+        121
+      ],
+      "endPx": [
+        420,
+        420
+      ],
+      "confidence": 0.98
+    },
+    {
+      "id": "wa-mid-v2",
+      "startPx": [
+        680,
+        121
+      ],
+      "endPx": [
+        680,
+        759
+      ],
+      "confidence": 0.98
+    }
+  ],
+  "roomSeeds": [
+    {
+      "id": "geo-a-living",
+      "pointPx": [
+        300,
+        600
+      ],
+      "name": "客餐厅",
+      "type": "living",
+      "confidence": 0.97
+    },
+    {
+      "id": "geo-a-bedroom",
+      "pointPx": [
+        820,
+        600
+      ],
+      "name": "卧室",
+      "type": "bedroom",
+      "confidence": 0.95
+    },
+    {
+      "id": "geo-a-kitchen",
+      "pointPx": [
+        220,
+        260
+      ],
+      "name": "厨房",
+      "type": "kitchen",
+      "confidence": 0.94
+    },
+    {
+      "id": "geo-a-hallway",
+      "pointPx": [
+        550,
+        260
+      ],
+      "name": "走廊",
+      "type": "hallway",
+      "confidence": 0.92
+    },
+    {
+      "id": "geo-a-second-bedroom",
+      "pointPx": [
+        820,
+        260
+      ],
+      "name": "次卧",
+      "type": "bedroom",
+      "confidence": 0.95
+    }
+  ],
+  "openings": [
+    {
+      "id": "geo-a-o1",
+      "kind": "opening",
+      "centerPx": [
+        530.5,
+        420
+      ],
+      "widthPx": 121,
+      "orientation": "horizontal",
+      "roomSeedId": "geo-a-living",
+      "heightMeters": 2.4,
+      "confidence": 0.95
+    },
+    {
+      "id": "geo-a-o2",
+      "kind": "door",
+      "centerPx": [
+        420,
+        340.5
+      ],
+      "widthPx": 91,
+      "orientation": "vertical",
+      "roomSeedId": "geo-a-kitchen",
+      "heightMeters": 2.1,
+      "swing": "sliding",
+      "confidence": 0.92
+    },
+    {
+      "id": "geo-a-o3",
+      "kind": "door",
+      "centerPx": [
+        680,
+        269.5
+      ],
+      "widthPx": 91,
+      "orientation": "vertical",
+      "roomSeedId": "geo-a-second-bedroom",
+      "heightMeters": 2.1,
+      "swing": "right",
+      "confidence": 0.89
+    },
+    {
+      "id": "geo-a-o4",
+      "kind": "window",
+      "centerPx": [
+        409.5,
+        759
+      ],
+      "widthPx": 241,
+      "orientation": "horizontal",
+      "roomSeedId": "geo-a-living",
+      "heightMeters": 1.8,
+      "sillHeightMeters": 0.7,
+      "confidence": 0.94
+    },
+    {
+      "id": "geo-a-o5",
+      "kind": "window",
+      "centerPx": [
+        839,
+        759
+      ],
+      "widthPx": 208,
+      "orientation": "horizontal",
+      "roomSeedId": "geo-a-bedroom",
+      "heightMeters": 1.8,
+      "sillHeightMeters": 0.7,
+      "confidence": 0.93
+    }
+  ]
+}

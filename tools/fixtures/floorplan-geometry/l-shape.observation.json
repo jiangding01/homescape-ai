@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "0.1.0",
+  "source": {
+    "kind": "floorplan_image",
+    "sourceLabel": "geometry-l-shape",
+    "widthPx": 600,
+    "heightPx": 600
+  },
+  "calibration": {
+    "startPx": [
+      100,
+      500
+    ],
+    "endPx": [
+      300,
+      500
+    ],
+    "realDistanceMeters": 2,
+    "confidence": 0.99
+  },
+  "assumptions": {
+    "wallThicknessMeters": 0.12,
+    "ceilingHeightMeters": 2.8
+  },
+  "walls": [
+    {
+      "id": "l-top",
+      "startPx": [
+        100,
+        100
+      ],
+      "endPx": [
+        500,
+        100
+      ],
+      "confidence": 0.99
+    },
+    {
+      "id": "l-right-top",
+      "startPx": [
+        500,
+        100
+      ],
+      "endPx": [
+        500,
+        300
+      ],
+      "confidence": 0.99
+    },
+    {
+      "id": "l-notch-h",
+      "startPx": [
+        300,
+        300
+      ],
+      "endPx": [
+        500,
+        300
+      ],
+      "confidence": 0.99
+    },
+    {
+      "id": "l-notch-v",
+      "startPx": [
+        300,
+        300
+      ],
+      "endPx": [
+        300,
+        500
+      ],
+      "confidence": 0.99
+    },
+    {
+      "id": "l-bottom",
+      "startPx": [
+        100,
+        500
+      ],
+      "endPx": [
+        300,
+        500
+      ],
+      "confidence": 0.99
+    },
+    {
+      "id": "l-left",
+      "startPx": [
+        100,
+        100
+      ],
+      "endPx": [
+        100,
+        500
+      ],
+      "confidence": 0.99
+    }
+  ],
+  "roomSeeds": [
+    {
+      "id": "geo-l-room",
+      "pointPx": [
+        200,
+        200
+      ],
+      "name": "L 型房间",
+      "type": "living",
+      "confidence": 0.96
+    }
+  ],
+  "openings": []
+}
