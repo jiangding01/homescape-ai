@@ -109,10 +109,34 @@
 - [x] 异步 sync generation 防止旧资产写入新 Scene
 - [x] 加载失败时按 Catalog dimensions 降级尺寸代理
 - [x] 7 个本地 normalized demo glTF 资产
+- [x] Production Asset Ingestion / Geometry QA Gate
 - [ ] 公司真实 SKU GLB 入库
 - [ ] 自动 Meshopt / KTX2 压缩流水线
 - [ ] 多级 LOD 生成与运行时距离选择
-- [ ] 资产几何尺寸自动 QA / 阻断
+- [x] 资产几何尺寸自动 QA / 阻断（PR #10）
+
+## PR #10 — Production Asset Ingestion
+
+- [x] 独立 @homescape/asset-pipeline Contract
+- [x] Asset Ingestion Manifest v0.1
+- [x] 显式 sourceRoot，阻断 sourcePath 越界
+- [x] glTF / GLB 2.0 离线检查器
+- [x] Scene Node Transform → World Bounds
+- [x] Catalog Dimensions 自动对比与误差门禁
+- [x] floor-center Pivot 自动 QA
+- [x] Triangle / File Size / Texture Size Budget
+- [x] Animation / Skin / Morph Target 阻断
+- [x] LOD0 必须存在 + LOD Triangle 单调检查
+- [x] Meshopt / KTX2 Production Policy Gate
+- [x] Self-contained GLB Production Policy Gate
+- [x] SHA-256 / byteSize / Release Manifest
+- [x] CatalogRenderAsset Activation Gate
+- [x] 事务式发布：任一 SKU blocked 时不发布模型文件
+- [x] 7 个现有 Demo SKU 的 Ingestion Check Manifest
+- [ ] 原始 FBX / OBJ / USD 自动转换 Processor
+- [ ] Meshopt / KTX2 自动生成 Processor
+- [ ] 公司真实 SKU 数据源 Adapter
+- [ ] CDN / OSS 实际上传 Adapter
 
 ## P1 — Real Room Vertical Slice
 
@@ -135,9 +159,9 @@
 
 ## 下一阶段候选
 
-### PR #10 — Production Asset Ingestion
+### PR #11 — Floor Plan Extractor Benchmark
 
-把公司真实 SKU 模型接入标准化流水线，并补齐离线 Geometry QA、LOD、Meshopt / KTX2 与资产版本发布。
+PR #10 后先暂停功能开发。下一次继续时，优先验证真实户型图片 / PDF → FloorPlanDraft 的 Extractor 方案与评测集，再决定 CV / VLM / 公司数据 Adapter 的组合。
 
 ### Technical Spikes
 

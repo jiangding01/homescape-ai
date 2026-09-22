@@ -1,4 +1,4 @@
-# HomeScape AI Architecture v0.9
+# HomeScape AI Architecture v0.10
 
 ## 1. 当前端到端闭环
 
@@ -11,149 +11,167 @@ Real Floor Plan
 → Catalog + Planner
 → DesignState / Revision
 → RenderSnapshot
-      ├── Spatial Model
-      ├── Object Transform
-      └── Render Asset Source
-→ Babylon Runtime
+→ Babylon glTF / GLB Runtime
 ~~~
 
-PR #9 新增的原则是：**空间几何真值、商品业务真值与视觉模型资产继续分离。**
-
-## 2. 三类真值
-
-### HomeSpatialModel
-
-房屋本体：Room / Wall / Opening / Structure / Utility。
-
-### CatalogAsset
-
-商品业务与空间约束真值：
-
-- SKU
-- width / height / depth
-- category
-- price
-- variants
-- placement rules
-- render asset manifest
-
-Planner 只依赖这里的真实尺寸与规则。
-
-### Render Asset
-
-视觉表达，不反向决定业务尺寸。
-
-标准化资产必须满足：
+视觉资产链路现在进一步扩展为：
 
 ~~~text
-unit              = meter
-coordinateSystem  = right-handed-y-up
-pivot             = floor-center
+Prepared glTF / GLB Candidate
+→ Production Asset Ingestion
+→ Geometry / Budget / Security QA
+→ Release Manifest
+→ CatalogRenderAsset Activation
+→ Runtime
 ~~~
 
-运行时不允许通过“看起来差不多”自动猜厘米、毫米、Z-up 或 Pivot。
+PR #10 的重点不是在浏览器中继续增加模型修复逻辑，而是把“不合格资产不能进入 Catalog”变成可执行 Gate。
 
-## 3. Asset Manifest
+## 2. Asset Pipeline 边界
 
-CatalogRenderAsset 当前包含：
+当前资产系统分为三层：
 
-- version
-- normalization contract
-- LOD list
-- format: glTF / GLB
-- URI
-- optional byteSize / contentHash
-- compression metadata
+### Source / Processor
 
-P1 已支持 LOD manifest，但 Babylon 当前选择最小 level 作为 LOD0。动态 LOD 选择在后续整屋性能阶段实现。
+DCC、供应商或公司资产系统提供源模型。原始 FBX / OBJ / USD 的转换、减面、Meshopt、KTX2 等属于 Processor 层。
 
-## 4. Catalog Validation
+PR #10 不伪造这些能力，而是要求 Processor 产出 glTF / GLB Candidate，再由 Ingestion Gate 验证。
 
-Catalog 初始化时验证：
+### Production Asset Ingestion
 
-- ID / SKU 唯一
-- dimensions 为正数
-- Render Asset normalization contract
-- LOD level 唯一
-- 资产 URI 仅允许站内绝对路径或 HTTPS
-- byteSize（若存在）为正整数
+新的离线 Ingestion 工具负责：
 
-错误 Catalog 不进入 Planner / Renderer。
+- Manifest / Source Root
+- glTF / GLB 2.0 解析
+- Node Transform 后的 World Bounds
+- Catalog Dimensions QA
+- floor-center Pivot QA
+- Triangle / File / Texture Budget
+- LOD QA
+- Meshopt / KTX2 / Self-contained GLB Policy
+- 安全资源路径检查
+- SHA-256 / byteSize
+- Release Manifest
+- Activation Gate
 
-## 5. RenderSnapshot Asset Resolver
+### Runtime
 
-Domain 的 DesignObject 仍只保存 assetId / variantId，不保存 Babylon 或 URL。
+Runtime 只加载已经激活的 CatalogRenderAsset，不承担生产资产修复职责。
+
+## 3. Geometry QA
+
+商品尺寸仍以 Catalog 为业务真值。
+
+Ingestion 根据 glTF Scene Graph，把 Mesh POSITION accessor 的 local bounds 经过 Node world transform 后计算最终 AABB：
 
 ~~~text
-DesignObject.assetId
-      ↓
-Render Asset Resolver
-      ↓
-RenderSnapshot.renderAsset
-      ↓
-Renderer Adapter
+POSITION min/max
+→ Node local transform
+→ parent world transform
+→ World Bounds
+→ width / height / depth
+→ compare Catalog dimensions
 ~~~
 
-这样 Domain 不依赖 Catalog 的视觉实现，Renderer Contract 也不依赖 Catalog package。
-
-## 6. Babylon Asset Runtime
-
-Babylon Adapter 使用 AssetContainer：
+同时检查：
 
 ~~~text
-Render Asset URI
-→ LoadAssetContainer
-→ cache by version + URI
-→ instantiate per DesignObject
-→ parent to object transform
+centerX ≈ 0
+minY    ≈ 0
+centerZ ≈ 0
 ~~~
 
-同一 SKU 多次出现时不重复下载/解析源文件。
+以确认 floor-center Pivot。
 
-如果模型不存在或加载失败：
+POSITION accessor 缺少 min / max 时直接阻断，因为 Ingestion 无法证明模型尺寸正确。
+
+## 4. Production Policy
+
+Policy 可按业务调整，但默认生产建议要求：
+
+- LOD0 存在
+- LOD triangle 不随级别增加
+- LOD0 / LOD1 / LOD2 都必须配置 Triangle Budget
+- LOD0 / LOD1 / LOD2 都必须配置 File Size Budget
+- Texture Edge Budget
+- self-contained GLB
+- 实际 BufferView 使用 EXT_meshopt_compression
+- 实际 Texture/Image 使用 KTX2 / KHR_texture_basisu（存在纹理时）
+- 禁止 KHR_draco_mesh_compression
+- 禁止 Animation / Skin / Morph Target
+
+Demo Fixture 可以使用宽松 Policy 验证流程，但不能因此获得 Production SKU 身份。
+
+## 5. Security
+
+Manifest 明确声明 sourceRoot。
+
+所有 sourcePath 必须位于 sourceRoot 内；检查同时使用 realpath，避免通过符号链接绕过目录边界。
+
+Catalog Asset ID 与 Release Version 会进入发布路径，因此只允许安全路径字符并禁止 . / ..。SKU 只作为业务标识与报告字段，不强行限制为路径字符集。
+
+glTF 外部 Buffer / Image：
+
+- 不允许 HTTP / HTTPS 等远程引用
+- 不允许绝对路径
+- 不允许越过模型所在目录
+
+Publish URI 由 Ingestion 生成，不直接信任 Source Filename。
+
+## 6. Transactional Release
+
+Ingestion 先完成整批 SKU 的 QA。
 
 ~~~text
-Catalog dimensions
-→ deterministic Box Proxy
+inspect all assets
+        ↓
+any blocked?
+   ├─ yes → no model files published
+   │        asset-release.blocked.json
+   └─ no  → copy bundles
+            asset-release.json
 ~~~
 
-视觉失败不能破坏 Planner、Revision 或整个 3D Scene。
+避免“前几个 SKU 已发布、后一个 SKU 失败”形成半发布状态。
 
-## 7. Async Safety
+## 7. Activation Contract
 
-每次 sync 都生成单调 generation。
+@homescape/asset-pipeline 提供 Release 类型和 Activation Gate。
 
-资产异步加载完成后，只有 generation 和 spatialRoot 仍属于本次 sync 才允许实例化，避免旧 Revision 的慢请求污染新场景。
-
-## 8. 当前 Demo Asset
-
-PR #9 提交 7 个本地、自包含、已按规范归一化的 glTF Demo Asset，用来真实验证：
-
-- glTF Loader
-- AssetContainer cache
-- 多实例
-- transform
-- material
-- fallback
-
-这些资产是 Pipeline Fixture，不宣称为公司生产 SKU。
-
-## 9. Production Pipeline
-
-下一阶段：
+只有 release.status === ready 且每个 Record 都带 renderAsset 时，才能收集成：
 
 ~~~text
-Company SKU Source
-→ source validation
-→ unit / axis / pivot normalize
-→ mesh cleanup
-→ dimension QA
-→ LOD generation
-→ Meshopt
-→ KTX2
-→ manifest + version + hash
-→ CDN publish
-→ CatalogAsset
+catalogAssetId → CatalogRenderAsset
 ~~~
 
-生产资产必须在离线阶段被拒绝或修复，不应把模型质量问题推给浏览器 Runtime。
+这让后续 API / Catalog 同步可以共享同一个发布语义。
+
+## 8. 当前未实现能力
+
+PR #10 尚未内置：
+
+- FBX / OBJ / USD → glTF / GLB 转换
+- 自动 LOD 生成
+- Meshopt 编码
+- KTX2 转码
+- CDN / OSS 上传
+- 公司真实 SKU 数据源 Adapter
+
+这些是明确的 Processor / Publisher Adapter，不应该通过 Runtime 猜测补齐。
+
+## 9. P1 下一重点
+
+Real Room 的空间、设计、AI、Catalog、Render Asset 与 Production Ingestion 基础闭环已经形成。
+
+下一轮更值得优先验证的是：
+
+~~~text
+真实户型图片 / PDF
+→ Extractor
+→ FloorPlanDraft
+→ Benchmark
+→ Human Review
+→ HomeSpatialModel
+~~~
+
+以补上目前 P1 最大的真实输入缺口。

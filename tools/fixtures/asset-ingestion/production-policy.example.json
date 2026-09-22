@@ -1,0 +1,18 @@
+{
+  "maxDimensionErrorRatio": 0.03,
+  "pivotToleranceMeters": 0.015,
+  "maxTrianglesByLod": {
+    "0": 150000,
+    "1": 60000,
+    "2": 20000
+  },
+  "maxFileBytesByLod": {
+    "0": 12582912,
+    "1": 6291456,
+    "2": 3145728
+  },
+  "maxTextureEdge": 4096,
+  "requireMeshopt": true,
+  "requireKtx2": true,
+  "requireSelfContainedGlb": true
+}

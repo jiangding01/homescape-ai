@@ -34,6 +34,7 @@ packages/
 ├── spatial-model           # 住宅空间真值
 ├── domain                  # DesignState / Operation / Revision
 ├── catalog                 # SKU / dimensions / placement rules
+├── asset-pipeline          # Production Asset Ingestion / Geometry QA
 ├── planner                 # Rule + Anchor + Constraint + Scoring
 ├── ai-runtime              # Capability abstraction + JEV Provider
 ├── design-intelligence     # 家装自然语言 → DesignOperation
@@ -79,20 +80,31 @@ TYPESAFE_MODEL=jev-latest
 
 ## 当前阶段
 
-已完成 Foundation、HomeSpatialModel、参数化 3D、Design State / Revision、Catalog / Planner、自然语言 Decision Runtime、Real Floor Plan + Active Workspace，以及 glTF / GLB Render Asset Runtime。
+已完成 Foundation、HomeSpatialModel、参数化 3D、Design State / Revision、Catalog / Planner、自然语言 Decision Runtime、Real Floor Plan + Active Workspace、glTF / GLB Runtime，以及 Production Asset Ingestion / Geometry QA Gate。
 
-CatalogAsset 现在可以携带标准化视觉资产 Manifest；RenderSnapshot 通过 assetId 解析视觉模型，Babylon 使用 AssetContainer 缓存与实例化。模型加载失败时会按照 Catalog 真实尺寸降级为几何代理，因此视觉资产故障不会破坏 Planner 或 Revision。
+生产资产现在通过独立 Manifest 进入离线检查：模型 World Bounds 会和 Catalog 尺寸比对，同时检查 Pivot、三角面、文件/纹理预算、LOD、Meshopt/KTX2 与自包含 GLB 策略；整批资产只有全部通过后才生成可激活 Release Manifest。
 
-仓库内的 7 个 glTF 是标准化 Pipeline Fixture，用于验证真实模型加载链路，不代表公司生产 SKU。
+仓库内的 7 个 glTF 仍然只是 Pipeline Fixture，不代表公司生产 SKU。PR #10 也没有伪造 FBX/OBJ/USD 转换或 Meshopt/KTX2 编码能力，这些保留为后续 Processor Adapter。
 
-下一阶段：Production Asset Ingestion，把公司真实 SKU 接入离线 Geometry QA、LOD、Meshopt / KTX2 与版本发布流水线。
+今天的开发停在 PR #10。下一次继续时，优先进入真实户型 Extractor Benchmark。
 
 目标闭环：
 
 > 真实户型图 → HomeSpatialModel → 客厅方案 → 自然语言连续修改 → 实时 3D → Undo / Replay / Save。
 
+## 资产入库
+
+~~~bash
+pnpm asset:check-demo
+
+pnpm asset:ingest tools/fixtures/asset-ingestion/demo-release.json --out .asset-release
+~~~
+
+Production Policy 示例见 tools/fixtures/asset-ingestion/production-policy.example.json。
+
 ## 文档
 
 - [架构设计](docs/ARCHITECTURE.md)
+- [资产流水线](docs/ASSET_PIPELINE.md)
 - [路线图](docs/ROADMAP.md)
 - [ADR](docs/adr/)

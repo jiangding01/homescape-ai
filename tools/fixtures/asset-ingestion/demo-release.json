@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "0.1.0",
+  "releaseVersion": "demo-2026.09.21",
+  "sourceRoot": "../../..",
+  "catalogBaseUri": "/assets/releases",
+  "policy": {
+    "maxDimensionErrorRatio": 0.02,
+    "pivotToleranceMeters": 0.01,
+    "maxTrianglesByLod": {
+      "0": 200000,
+      "1": 80000,
+      "2": 30000
+    },
+    "maxFileBytesByLod": {
+      "0": 15728640,
+      "1": 8388608,
+      "2": 4194304
+    },
+    "maxTextureEdge": 4096,
+    "requireMeshopt": false,
+    "requireKtx2": false,
+    "requireSelfContainedGlb": false
+  },
+  "assets": [
+    {
+      "catalogAssetId": "catalog-sofa-oak-220",
+      "sku": "HS-SOFA-220-OAK",
+      "expectedDimensions": { "width": 2.2, "height": 0.82, "depth": 0.92 },
+      "lods": [
+        { "level": 0, "sourcePath": "apps/web/public/assets/catalog/catalog-sofa-oak-220.gltf" }
+      ]
+    },
+    {
+      "catalogAssetId": "catalog-sofa-gray-190",
+      "sku": "HS-SOFA-190-GRAY",
+      "expectedDimensions": { "width": 1.9, "height": 0.8, "depth": 0.88 },
+      "lods": [
+        { "level": 0, "sourcePath": "apps/web/public/assets/catalog/catalog-sofa-gray-190.gltf" }
+      ]
+    },
+    {
+      "catalogAssetId": "catalog-sofa-gray-210",
+      "sku": "HS-SOFA-210-GRAY",
+      "expectedDimensions": { "width": 2.1, "height": 0.84, "depth": 0.94 },
+      "lods": [
+        { "level": 0, "sourcePath": "apps/web/public/assets/catalog/catalog-sofa-gray-210.gltf" }
+      ]
+    },
+    {
+      "catalogAssetId": "catalog-table-oak-120",
+      "sku": "HS-TABLE-120-OAK",
+      "expectedDimensions": { "width": 1.2, "height": 0.38, "depth": 0.62 },
+      "lods": [
+        { "level": 0, "sourcePath": "apps/web/public/assets/catalog/catalog-table-oak-120.gltf" }
+      ]
+    },
+    {
+      "catalogAssetId": "catalog-table-stone-90",
+      "sku": "HS-TABLE-090-STONE",
+      "expectedDimensions": { "width": 0.9, "height": 0.36, "depth": 0.6 },
+      "lods": [
+        { "level": 0, "sourcePath": "apps/web/public/assets/catalog/catalog-table-stone-90.gltf" }
+      ]
+    },
+    {
+      "catalogAssetId": "catalog-plant-ficus-060",
+      "sku": "HS-PLANT-FICUS-060",
+      "expectedDimensions": { "width": 0.6, "height": 1.55, "depth": 0.6 },
+      "lods": [
+        { "level": 0, "sourcePath": "apps/web/public/assets/catalog/catalog-plant-ficus-060.gltf" }
+      ]
+    },
+    {
+      "catalogAssetId": "catalog-lamp-floor-040",
+      "sku": "HS-LAMP-FLOOR-040",
+      "expectedDimensions": { "width": 0.42, "height": 1.65, "depth": 0.42 },
+      "lods": [
+        { "level": 0, "sourcePath": "apps/web/public/assets/catalog/catalog-lamp-floor-040.gltf" }
+      ]
+    }
+  ]
+}
