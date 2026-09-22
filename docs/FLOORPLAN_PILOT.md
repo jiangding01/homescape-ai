@@ -132,6 +132,14 @@ Pilot Tool 会校验：
 - symbols
 - textDensity
 
+每个 Slice 除结构指标与 Review Burden 外，还会保留 Benchmark Failure Summary：
+
+~~~text
+failedCaseCount
+totalFailureCount
+failureCounts
+~~~
+
 例如可以直接看到：
 
 ~~~text
@@ -140,9 +148,22 @@ geometry=irregular
   openingRecall
   reviewDuration
   editCount
+  failureCounts:
+    room_recall_below_threshold: 4
+    room_iou_below_threshold: 3
 ~~~
 
-而不是只看一个全局平均数。
+或者：
+
+~~~text
+annotation=no_dimension
+  failureCounts:
+    scale_error_above_threshold: 5
+~~~
+
+这样 PR #17 的真实 Pilot 可以直接按失败分布判断下一步研发方向，而不是只看一个全局平均数。
+
+Failure Code 仍来自 Benchmark，不在 Pilot 阶段重新推断。Pilot 只负责保持并聚合证据，避免 Join 后丢失原始失败原因。
 
 ## Fingerprint
 
