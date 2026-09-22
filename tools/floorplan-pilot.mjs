@@ -879,7 +879,7 @@ function failureSummary(results) {
   let totalFailureCount = 0
 
   for (const result of results) {
-    if ((result.failures?.length ?? 0) > 0) {
+    if (!result.gatePass) {
       failedCaseCount += 1
     }
 
@@ -994,7 +994,9 @@ function printHumanSummary(report) {
           ' · review=' +
           (extractor.review.coverage * 100).toFixed(1) +
           '% · edits=' +
-          (extractor.review.meanTotalEdits?.toFixed(2) ?? 'n/a'),
+          (extractor.review.meanTotalEdits?.toFixed(2) ?? 'n/a') +
+          ' · failures=' +
+          extractor.failures.totalFailureCount,
       ),
       '',
     ].join('\n'),
