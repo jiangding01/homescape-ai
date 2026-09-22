@@ -41,5 +41,5 @@ jobs:
       - name: Pilot evaluation smoke
         run: pnpm floorplan:pilot:check-demo
 
-      - name: Raster pilot batch CLI smoke
-        run: pnpm floorplan:raster:batch -- --help
+      - name: Raster pilot batch smoke
+        run: pnpm floorplan:raster:batch:check-demo
