@@ -30,6 +30,14 @@ export interface FloorPlanExtractionResult {
   warnings?: readonly string[]
 }
 
+export interface FloorPlanExtractionRecord {
+  schemaVersion: '0.1.0'
+  sourceId: string
+  generatedAt: string
+  metadata: FloorPlanExtractionMetadata
+  warnings?: readonly string[]
+}
+
 export interface FloorPlanExtractor {
   readonly id: string
   supports(input: Pick<FloorPlanExtractorInput, 'kind' | 'mediaType'>): boolean

@@ -1,260 +1,282 @@
-# HomeScape AI Architecture v0.11
+# HomeScape AI Architecture v0.12
 
 ## 1. 当前端到端闭环
 
 ~~~text
-Real Floor Plan / PDF
-→ Floor Plan Extractor
+Real Floor Plan / PDF / Company Data
+        ↓
+Floor Plan Extractor Layer
+        ├── Metric Structured Baseline
+        ├── future CV Geometry
+        ├── future VLM
+        └── future Hybrid
+        ↓
+FloorPlanDraft
+        ↓
+Benchmark / Confidence
+        ↓
+Importer + Human Review
+        ↓
+HomeSpatialModel
+        ↓
+Active Workspace
+        ↓
+Design / Planner / Revision / Babylon Runtime
+~~~
+
+PR #12 的重点是把“真实数据进入评测系统”与“第一个实际 Extractor Adapter”补齐，但不伪造公司原始 Schema，也不在没有真实 Corpus 的情况下宣布模型选型结果。
+
+## 2. Metric Structured Baseline
+
+新增：
+
+~~~text
+MetricStructuredFloorPlanV01
+        ↓
+MetricStructuredFloorPlanExtractor
+        ↓
+FloorPlanDraft
+~~~
+
+输入面向已经具有结构化几何的上游系统：
+
+- sourceLabel
+- canvas width / height in meter
+- Room polygon in meter
+- Opening offset / width in meter
+- wall / ceiling assumptions
+- optional confidence
+
+Extractor ID：
+
+~~~text
+metric-structured-v0.1
+~~~
+
+它支持：
+
+~~~text
+kind      = company_data
+mediaType = application/vnd.homescape.metric-floorplan+json
+~~~
+
+## 3. Extractor Registry
+
+PR #12 同时增加 FloorPlanExtractorRegistry。
+
+自动路由只在“恰好一个 Extractor supports 当前输入”时成立；如果多个 Provider 同时支持 image/png，必须显式指定 extractorId，而不是隐式按注册顺序挑一个。
+
+这避免未来 CV 与 VLM 同时接入后出现不可复现的 Provider 选择。
+
+## 4. 为什么仍然输出 Pixel FloorPlanDraft
+
+FloorPlanDraft 是 Extractor 与 Spatial Importer 之间已经稳定的边界。
+
+公司结构化数据虽然天然使用 meter，但如果让 company_data 绕开 FloorPlanDraft，会形成第二套 Import Path。
+
+因此 Structured Adapter 使用确定性比例：
+
+~~~text
+default pixelsPerMeter = 100
+
+metric x
+→ pixel x = x × ppm
+
+metric z
+→ pixel y = canvasHeightPx - z × ppm
+
+calibration
+→ 1 meter = ppm pixels
+~~~
+
+这样经过 FloorPlanDraftImporter 后会恢复同一 metric geometry。
+
+这不是把 meter 降级成“图片数据”，而是复用统一的 Calibration / Import / Review / Validation 链路。
+
+## 5. Structured Data Validation
+
+Metric Structured Adapter 在生成 Draft 前执行：
+
+- schemaVersion
+- canvas positive dimensions
+- Room / Opening ID 唯一
+- Room polygon 至少 3 点
+- Point 在 canvas 内
+- Polygon 非零面积
+- Polygon 自相交阻断
+- 零长度边阻断
+- Room Type enum
+- confidence 0~1
+- Opening Room reference
+- Opening edgeIndex
+- offset + width 不越过 Edge
+- sill + height 不超过 Ceiling
+- wall / ceiling assumption validity
+- UTF-8 JSON strict decode
+- 默认 5MB Structured Input Size Gate
+
+输出后仍再次通过 isFloorPlanDraft Contract。
+
+## 6. Company Schema Boundary
+
+MetricStructuredFloorPlanV01 是 **HomeScape Normalized Structured Contract**，不是对任何公司内部户型 Schema 的猜测。
+
+Metric Structured Contract 使用专用 Vendor MIME，而不抢占普通 application/json。这样未来原始公司 JSON Adapter 可以安全共存。
+
+未来如果真实公司数据字段是：
+
+~~~text
+house.graph.nodes
+roomContours
+doors
+windows
+cadEntities
+...
+~~~
+
+应该增加：
+
+~~~text
+Company Raw Schema
+→ Company Schema Mapper
+→ MetricStructuredFloorPlanV01
+→ metric-structured-v0.1
 → FloorPlanDraft
-→ Candidate + Human Review
-→ HomeSpatialModel
-→ Active Workspace
-→ Natural Language
-→ DesignOperation[]
-→ Catalog + Planner
-→ DesignState / Revision
-→ RenderSnapshot
-→ Babylon glTF / GLB Runtime
 ~~~
 
-PR #11 不选择某个识图模型，而是先建立 **Extractor Contract + Benchmark Gate**。
+而不是把公司字段直接写进 HomeSpatialModel 或 Renderer。
 
-这样后续 CV、VLM、公司已有户型数据或 Hybrid Pipeline 都必须输出同一个 FloorPlanDraft，并在同一评测集上比较。
+## 7. Real Corpus Intake
 
-## 2. Extractor Contract
-
-@homescape/floorplan-extractor 定义：
+新增 FloorPlan Corpus Manifest：
 
 ~~~text
-FloorPlanExtractorInput
-  ├── sourceId
-  ├── kind: image / pdf / company_data
-  ├── mediaType
-  └── bytes
-
-FloorPlanExtractor
+dataset
+cases[]
   ├── id
-  ├── supports()
-  └── extract()
-
-FloorPlanExtractionResult
-  ├── FloorPlanDraft
-  ├── metadata
-  │    ├── extractorId
-  │    ├── provider / model
-  │    ├── latency
-  │    ├── token usage
-  │    ├── cost
-  │    └── traceId
-  └── warnings
+  ├── sourceKind
+  ├── mediaType
+  ├── sourcePath
+  ├── groundTruthPath
+  └── tags
 ~~~
 
-业务代码只消费 FloorPlanDraft，不直接依赖 Provider。
+Corpus 工具验证：
 
-## 3. 为什么先 Benchmark
+- Case ID 唯一
+- Source 文件存在且非空
+- Source / Ground Truth 不越过 Corpus Root
+- realpath 防止 symlink 绕过
+- Ground Truth v0.1
+- Ground Truth source kind 一致
+- Ground Truth Room 必须有合法 type
+- Ground Truth Polygon 非零面积、无自相交、无零长度边
+- Opening Room / Edge / Ceiling 约束合法
+- Ground Truth 至少一个 Room
+- openings 必须是数组
 
-户型识别不能只看“图片看起来像”。
+## 8. Corpus Stratification
 
-真正影响后续 Planner / 3D 的误差包括：
-
-- Room 漏检 / 多检
-- Room Polygon 偏移
-- 房间类型错误
-- 门窗漏检
-- Door / Window 位置偏移
-- Opening 宽度错误
-- 标尺 / 尺寸比例错误
-- Source 尺寸或类型不一致
-
-因此模型选型必须落到结构化指标，而不是只靠肉眼抽查。
-
-## 4. Benchmark Metrics
-
-PR #11 首批指标：
+每个 Case 必须标记：
 
 ~~~text
-Draft Validity
-Source Kind Match
-Source Dimensions Match
+quality
+  clean / compressed / blurred / scanned
 
-Room
-  ├── Precision
-  ├── Recall
-  ├── Mean Polygon IoU
-  ├── Type Accuracy
-  └── Max Candidate Room Overlap Ratio
+geometry
+  rectangular / l_shape / irregular
 
-Opening
-  ├── Precision
-  ├── Recall
-  ├── Center Error Ratio
-  └── Width Error Ratio
+annotation
+  full_dimension / partial_dimension / no_dimension
 
-Scale
-  └── Calibration Error Ratio
+layout
+  single_room / open_plan / multi_room
+
+symbols
+  standard / mixed / unknown
+
+textDensity
+  sparse / normal / dense / overlap
 ~~~
 
-Room ID 不参与匹配。
+Corpus Summary 会输出各维度分布，避免 50 张数据其实全部来自同一种“干净矩形户型”。
 
-Candidate Room 与 Ground Truth Room 使用 Polygon IoU 做几何匹配，因此不同模型可以自由生成自己的实体 ID。
+## 9. Local Private Corpus
 
-## 5. Polygon IoU
+真实公司户型图不要求提交到 Git。
 
-Benchmark 使用 deterministic raster IoU，而不是要求第三方几何依赖。
-
-每对 Polygon 在其联合 Bounds 内使用固定网格采样：
+建议：
 
 ~~~text
-Ground Truth Polygon
-        +
-Candidate Polygon
-        ↓
-fixed raster grid
-        ↓
-intersection samples / union samples
-        ↓
-approximate IoU
+.floorplan-corpus/
+  corpus.json
+  sources/
+  ground-truth/
+  candidates/
+  reports/
 ~~~
 
-Smoke Dataset 使用 96×96。
+该目录已加入 .gitignore。
 
-真实 Benchmark 可以在 Manifest 中提高到 128~256，但要平衡运行成本。
-
-## 6. Opening Match
-
-Opening 不能依赖 edgeIndex 相同，因为 Candidate Polygon 顶点数量可能不同。
-
-评测先完成 Room Geometry Match，然后：
+这样可以在本地或受控 CI 环境中跑：
 
 ~~~text
-Ground Truth Opening
-→ matched Candidate Room
-→ same opening kind
-→ derive opening center from edge + offset + width
-→ nearest center within normalized tolerance
-→ one-to-one match
+Corpus Check
+→ Extractor Runner
+→ Candidate JSON
+→ Benchmark
+→ Report
 ~~~
 
-同时记录 Width Relative Error。
+而不把敏感户型素材混进仓库历史。
 
-## 7. Scale
+## 10. Runner
 
-比例尺统一比较 Pixels Per Meter：
+Structured Baseline 可直接运行：
 
-~~~text
-distance(startPx, endPx)
-------------------------
-realDistanceMeters
+~~~bash
+pnpm floorplan:extract -- input.json output.json \
+  --metadata output.meta.json
 ~~~
 
-Candidate 和 Ground Truth 的相对误差超过 Gate 即失败。
+Candidate JSON 与 Extraction Metadata 分离保存。Benchmark 继续只消费 FloorPlanDraft，实验记录则保留 extractorId / provider / model / latency 等 Sidecar Metadata。
 
-这比只比较 realDistanceMeters 更稳，因为不同 Extractor 可能选择不同的标尺线段。
+Demo：
 
-## 8. Benchmark 与 Extractor 执行解耦
-
-当前 CLI 消费已经生成的 Candidate JSON：
-
-~~~text
-Extractor A ─┐
-Extractor B ─┼→ FloorPlanDraft JSON
-Extractor C ─┘
-                  ↓
-        floorplan-benchmark.mjs
-                  ↓
-              report.json
+~~~bash
+pnpm floorplan:extract-demo
 ~~~
 
-这样 Benchmark 本身：
+Corpus Intake：
 
-- 不持有 Provider API Key
-- 不受网络波动影响
-- 可以复跑相同输出
-- 可以把模型调用成本和评测成本分开
-- 可以对历史模型版本做回归
-
-后续可以增加 Runner，但不应该让 Benchmark 工具直接绑定某家 API。
-
-## 9. Smoke Fixture 与真实 Corpus
-
-仓库当前的 2 张 SVG Fixture 只用于验证 Benchmark Harness：
-
-- reference-json 应通过
-- degraded-json 应失败
-
-它们**不是模型效果结论，也不是生产 Benchmark Corpus**。
-
-模型选型前必须准备至少 30~50 张真实户型图 / PDF，并覆盖：
-
-- 标准 CAD 导出图
-- 截图 / 压缩图
-- 扫描件
-- 有 / 无尺寸标注
-- 开放式客餐厅
-- 异形房间
-- 多门窗
-- 文本遮挡
-- 旋转 / 轻微透视
-- 不同公司 / 设计软件图例风格
-
-Ground Truth 要由人工校验，而不是由另一个模型自动生成。
-
-## 10. 选型原则
-
-不要先问“VLM 还是 CV”。
-
-真实评测后再决定：
-
-~~~text
-Company Structured Data
-CV Geometry
-VLM Semantic
-Hybrid CV + VLM
+~~~bash
+pnpm floorplan:corpus -- .floorplan-corpus/corpus.json --min-cases 30
 ~~~
 
-可能的生产方案完全可以是 Hybrid：
+## 11. 仍然没有完成的事情
 
-~~~text
-CV / Geometry
-  → walls / rooms / openings
-VLM
-  → room semantics / ambiguous symbol interpretation
-Deterministic Normalizer
-  → topology / calibration / confidence
-Human Review
-  → final correction
-~~~
+PR #12 没有声称完成：
 
-## 11. 下一阶段
+- 30~50 张真实 Corpus
+- 公司原始数据字段 Mapper
+- CV 户型识别
+- VLM 户型识别
+- PDF Rasterization
+- OCR
+- Human Review Burden 自动采集
 
-PR #12 应优先做真实 Benchmark Corpus 和第一个实际 Adapter。
+这些需要真实输入和实际 Provider，不能用 Synthetic Fixture 代替。
 
-在真实数据量不足之前，不根据当前 2 个 Smoke Fixture 宣布任何模型或技术路线胜出。
+## 12. 下一阶段
 
-## 12. 保持不变的核心边界
+PR #13 应围绕真实 Corpus 展开，而不是继续增加 Synthetic Demo。
 
-PR #11 只增加 Extractor / Evaluation Layer，不改变此前已经稳定的真值边界：
+在有真实 30~50 Case 前，最值得继续编码的只有：
 
-~~~text
-HomeSpatialModel = 住宅空间真值
-DesignState      = 设计状态真值
-CatalogAsset     = 商品尺寸 / SKU / 摆放规则真值
-RenderAsset      = 视觉表达
-~~~
+- Company Raw Schema Mapper（需要真实 Schema）
+- Corpus Annotation / Review Tooling
+- CV Geometry Baseline（需要真实图跑数）
 
-Production Asset Ingestion 仍负责 glTF / GLB 的 Geometry QA、Pivot、LOD、Meshopt / KTX2 与 Release Gate。
+核心原则保持不变：
 
-AI 仍只能产生 Proposal / DesignOperation，不能直接修改 HomeSpatialModel、DesignState 或 Render Scene。
-
-因此 Floor Plan Extractor 即使使用 VLM，也只能产出 FloorPlanDraft Candidate：
-
-~~~text
-Extractor Output
-→ Benchmark / Confidence
-→ Importer
-→ Human Review
-→ Validation
-→ HomeSpatialModel
-~~~
-
-识图 Provider 不拥有住宅空间最终真值。
+> Extractor 只产生 Candidate，HomeSpatialModel 最终真值仍然由 Importer + Human Review + Validation 确认。

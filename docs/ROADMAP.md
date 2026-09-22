@@ -156,10 +156,33 @@
 - [x] 按 Extractor 汇总指标
 - [x] reference / degraded 正反 Smoke Fixture
 - [ ] 30~50 张真实户型图 / PDF Benchmark Corpus
-- [ ] 公司户型数据 Adapter
+- [x] Normalized Structured Data Baseline Adapter（PR #12）
+- [ ] 公司原始户型数据 Schema Mapper
 - [ ] CV Extractor 实际跑数
 - [ ] VLM Extractor 实际跑数
 - [ ] Human Review 修正量 / 修正耗时指标
+
+## PR #12 — Real Corpus Intake + Structured Extractor Baseline
+
+- [x] Metric Structured Floor Plan v0.1 Contract
+- [x] FloorPlanExtractorRegistry
+- [x] metric-structured-v0.1 FloorPlanExtractor
+- [x] company_data + HomeScape Vendor MIME 支持
+- [x] meter geometry → canonical FloorPlanDraft pixel space
+- [x] Room / Opening / Confidence / Assumption 校验
+- [x] Source Bounds / Edge / Self-intersection / Ceiling Height Gate
+- [x] UTF-8 JSON Runner
+- [x] Corpus Manifest v0.1
+- [x] Corpus Tag Taxonomy
+- [x] Corpus path realpath 安全检查
+- [x] Ground Truth 基础完整性检查
+- [x] Corpus Distribution Summary + Dataset Fingerprint
+- [x] Synthetic Corpus Smoke Manifest
+- [ ] 30~50 张真实户型图 / PDF Corpus
+- [ ] 公司原始户型数据 Schema Mapper
+- [ ] CV Geometry Adapter
+- [ ] VLM Structured Extraction Adapter
+- [ ] Human Review Burden 数据采集
 
 ## P1 — Real Room Vertical Slice
 
@@ -183,16 +206,17 @@
 
 ## 下一阶段候选
 
-### PR #12 — Real Floor Plan Benchmark Corpus + First Extractor Adapter
+### PR #13 — Real Corpus Collection + Geometry Baseline
 
-PR #11 先把评测框架和 Contract 固定下来。下一阶段不要直接在 Demo Fixture 上选型，应先收集 30~50 张真实户型图 / PDF 并完成 Ground Truth，再接入第一个实际 Extractor Adapter 跑数。
+PR #12 已经建立真实 Corpus Intake Contract 和第一个可运行的结构化数据 Baseline Adapter。
 
-优先顺序建议：
+下一阶段需要真实输入数据才能继续做有意义的模型选型：
 
-1. 公司已有结构化户型数据 Adapter（若可用）
-2. CV / Geometry Baseline
-3. VLM-assisted Extractor
-4. Hybrid：CV Geometry + VLM Semantic
+1. 收集 30~50 张真实户型图 / PDF
+2. 人工完成 FloorPlanDraft Ground Truth
+3. 若公司存在原始结构化户型数据，补一层 Company Schema Mapper
+4. 接入第一个 CV / Geometry Baseline
+5. 与 metric-structured baseline / 后续 VLM 在同一 Benchmark 上比较
 
 
 ### Technical Spikes

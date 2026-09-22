@@ -1,0 +1,197 @@
+{
+  "schemaVersion": "0.1.0",
+  "sourceLabel": "structured-plan-a",
+  "canvas": {
+    "widthMeters": 10.8,
+    "heightMeters": 8.4
+  },
+  "assumptions": {
+    "wallThicknessMeters": 0.12,
+    "ceilingHeightMeters": 2.8,
+    "wallThicknessConfirmed": true,
+    "ceilingHeightConfirmed": true
+  },
+  "rooms": [
+    {
+      "id": "structured-living",
+      "name": "客餐厅",
+      "type": "living",
+      "boundaryMeters": [
+        [
+          0.8,
+          4.2
+        ],
+        [
+          4.2,
+          4.2
+        ],
+        [
+          6.8,
+          4.2
+        ],
+        [
+          6.8,
+          0.8
+        ],
+        [
+          0.8,
+          0.8
+        ]
+      ],
+      "confidence": 1
+    },
+    {
+      "id": "structured-bedroom",
+      "name": "卧室",
+      "type": "bedroom",
+      "boundaryMeters": [
+        [
+          6.8,
+          4.2
+        ],
+        [
+          10,
+          4.2
+        ],
+        [
+          10,
+          0.8
+        ],
+        [
+          6.8,
+          0.8
+        ]
+      ],
+      "confidence": 1
+    },
+    {
+      "id": "structured-kitchen",
+      "name": "厨房",
+      "type": "kitchen",
+      "boundaryMeters": [
+        [
+          0.8,
+          7.2
+        ],
+        [
+          4.2,
+          7.2
+        ],
+        [
+          4.2,
+          4.2
+        ],
+        [
+          0.8,
+          4.2
+        ]
+      ],
+      "confidence": 1
+    },
+    {
+      "id": "structured-hall",
+      "name": "走廊",
+      "type": "hallway",
+      "boundaryMeters": [
+        [
+          4.2,
+          7.2
+        ],
+        [
+          6.8,
+          7.2
+        ],
+        [
+          6.8,
+          4.2
+        ],
+        [
+          4.2,
+          4.2
+        ]
+      ],
+      "confidence": 1
+    },
+    {
+      "id": "structured-bedroom2",
+      "name": "次卧",
+      "type": "bedroom",
+      "boundaryMeters": [
+        [
+          6.8,
+          7.2
+        ],
+        [
+          10,
+          7.2
+        ],
+        [
+          10,
+          4.2
+        ],
+        [
+          6.8,
+          4.2
+        ]
+      ],
+      "confidence": 1
+    }
+  ],
+  "openings": [
+    {
+      "id": "structured-opening-living-hall",
+      "roomId": "structured-living",
+      "edgeIndex": 1,
+      "kind": "opening",
+      "offsetMeters": 0.5,
+      "widthMeters": 1.2,
+      "heightMeters": 2.4,
+      "sillHeightMeters": 0,
+      "confidence": 1
+    },
+    {
+      "id": "structured-door-kitchen-hall",
+      "roomId": "structured-kitchen",
+      "edgeIndex": 1,
+      "kind": "door",
+      "offsetMeters": 1.75,
+      "widthMeters": 0.9,
+      "heightMeters": 2.1,
+      "swing": "sliding",
+      "confidence": 1
+    },
+    {
+      "id": "structured-door-bedroom2-hall",
+      "roomId": "structured-bedroom2",
+      "edgeIndex": 3,
+      "kind": "door",
+      "offsetMeters": 1.05,
+      "widthMeters": 0.9,
+      "heightMeters": 2.1,
+      "swing": "right",
+      "confidence": 1
+    },
+    {
+      "id": "structured-window-living",
+      "roomId": "structured-living",
+      "edgeIndex": 3,
+      "kind": "window",
+      "offsetMeters": 1.5,
+      "widthMeters": 2.4,
+      "heightMeters": 1.8,
+      "sillHeightMeters": 0.7,
+      "confidence": 1
+    },
+    {
+      "id": "structured-window-bedroom",
+      "roomId": "structured-bedroom",
+      "edgeIndex": 2,
+      "kind": "window",
+      "offsetMeters": 0.55,
+      "widthMeters": 2.1,
+      "heightMeters": 1.8,
+      "sillHeightMeters": 0.7,
+      "confidence": 1
+    }
+  ]
+}
