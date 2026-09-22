@@ -18,6 +18,19 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 const DEFAULT_EXTRACTOR_ID = 'raster-orthogonal-v0.1'
+const DEFAULT_BENCHMARK_THRESHOLDS = {
+  roomMatchIou: 0.6,
+  roomPrecisionMin: 0.95,
+  roomRecallMin: 0.95,
+  meanRoomIouMin: 0.9,
+  roomTypeAccuracyMin: 0.9,
+  candidateRoomOverlapRatioMax: 0.03,
+  openingCenterToleranceRatio: 0.02,
+  openingPrecisionMin: 0.9,
+  openingRecallMin: 0.9,
+  meanOpeningWidthErrorMax: 0.08,
+  scaleErrorMax: 0.02,
+}
 const REPO_ROOT = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '..',
@@ -31,10 +44,14 @@ function usage() {
     '    [--min-cases <number>]',
     '    [--corpus-report <report.json>]',
     '    [--report <report.json>]',
+    '    [--benchmark-manifest <manifest.json>]',
+    '    [--benchmark-report <report.json>]',
+    '    [--experiment-manifest <manifest.json>]',
     '    [--dry-run]',
     '',
     '说明：',
     '  先执行 Corpus Gate，再为 PNG / JPEG Case 批量生成 Raster Candidate + Metadata。',
+    '  同时生成 Benchmark Manifest 与 Pilot Experiment Manifest，避免真实 Pilot 手工拼装路径。',
     '  默认输出到 corpus 根目录下的 candidates/、metadata/、reports/。',
   ].join('\n')
 }
@@ -57,6 +74,9 @@ function parseArgs(argv) {
   let minCases = 10
   let corpusReportPath
   let reportPath
+  let benchmarkManifestPath
+  let benchmarkReportPath
+  let experimentManifestPath
   let dryRun = false
 
   while (args.length > 0) {
@@ -98,6 +118,27 @@ function parseArgs(argv) {
       continue
     }
 
+    if (arg === '--benchmark-manifest') {
+      const value = args.shift()
+      if (!value) throw new Error('--benchmark-manifest 缺少文件路径')
+      benchmarkManifestPath = resolve(process.cwd(), value)
+      continue
+    }
+
+    if (arg === '--benchmark-report') {
+      const value = args.shift()
+      if (!value) throw new Error('--benchmark-report 缺少文件路径')
+      benchmarkReportPath = resolve(process.cwd(), value)
+      continue
+    }
+
+    if (arg === '--experiment-manifest') {
+      const value = args.shift()
+      if (!value) throw new Error('--experiment-manifest 缺少文件路径')
+      experimentManifestPath = resolve(process.cwd(), value)
+      continue
+    }
+
     if (arg === '--dry-run') {
       dryRun = true
       continue
@@ -114,6 +155,9 @@ function parseArgs(argv) {
     minCases,
     corpusReportPath,
     reportPath,
+    benchmarkManifestPath,
+    benchmarkReportPath,
+    experimentManifestPath,
     dryRun,
   }
 }
@@ -201,10 +245,28 @@ function validateCorpus(value) {
         corpusCase.sourcePath,
         label + '.sourcePath',
       ),
+      groundTruthPath: nonEmptyString(
+        corpusCase.groundTruthPath,
+        label + '.groundTruthPath',
+      ),
     }
   })
 
   return { dataset, cases }
+}
+
+function portableRelative(root, target) {
+  return relative(root, target).split(sep).join('/')
+}
+
+function assertOutputWithinRoot(root, target, label) {
+  const rel = relative(resolve(root), resolve(target))
+
+  if (rel === '..' || rel.startsWith('..' + sep) || resolve(root) === resolve(target)) {
+    throw new Error(label + ' 必须位于 Corpus 目录内')
+  }
+
+  return resolve(target)
 }
 
 async function resolveWithinRoot(root, pathValue, label) {
@@ -290,9 +352,31 @@ async function main() {
   const reportPath =
     args.reportPath ??
     resolve(root, 'reports/raster-batch.json')
+  const benchmarkManifestPath =
+    args.benchmarkManifestPath ??
+    resolve(root, 'benchmark-raster.json')
+  const benchmarkReportPath =
+    args.benchmarkReportPath ??
+    resolve(root, 'reports/benchmark-raster.json')
+  const experimentManifestPath =
+    args.experimentManifestPath ??
+    resolve(root, 'experiment-raster.json')
+
+  for (const [label, path] of [
+    ['corpus-report', corpusReportPath],
+    ['report', reportPath],
+    ['benchmark-manifest', benchmarkManifestPath],
+    ['benchmark-report', benchmarkReportPath],
+    ['experiment-manifest', experimentManifestPath],
+  ]) {
+    assertOutputWithinRoot(root, path, label)
+  }
 
   await mkdir(dirname(corpusReportPath), { recursive: true })
   await mkdir(dirname(reportPath), { recursive: true })
+  await mkdir(dirname(benchmarkManifestPath), { recursive: true })
+  await mkdir(dirname(benchmarkReportPath), { recursive: true })
+  await mkdir(dirname(experimentManifestPath), { recursive: true })
 
   run(
     process.execPath,
@@ -362,8 +446,12 @@ async function main() {
 
     outputs.push({
       caseId: corpusCase.id,
-      candidatePath: relative(root, candidatePath),
-      extractionMetadataPath: relative(root, metadataPath),
+      sourcePath: corpusCase.sourcePath,
+      groundTruthPath: corpusCase.groundTruthPath,
+      candidatePath: portableRelative(root, candidatePath),
+      extractionMetadataPath: portableRelative(root, metadataPath),
+      reviewBurdenPath:
+        'review/' + args.extractorId + '/' + corpusCase.id + '.json',
     })
 
     if (args.dryRun) continue
@@ -387,6 +475,51 @@ async function main() {
     )
   }
 
+  const benchmarkManifest = {
+    schemaVersion: '0.1.0',
+    dataset: manifest.dataset,
+    gridSize: 128,
+    thresholds: DEFAULT_BENCHMARK_THRESHOLDS,
+    cases: outputs.map((item) => ({
+      id: item.caseId,
+      sourcePath: item.sourcePath,
+      groundTruthPath: item.groundTruthPath,
+      candidates: [
+        {
+          extractorId: args.extractorId,
+          candidatePath: item.candidatePath,
+        },
+      ],
+    })),
+  }
+
+  const experimentManifest = {
+    schemaVersion: '0.1.0',
+    dataset: manifest.dataset,
+    datasetFingerprint: corpusSummary.datasetFingerprint,
+    corpusManifestPath: portableRelative(root, args.manifestPath),
+    corpusSummaryPath: portableRelative(root, corpusReportPath),
+    benchmarkReportPath: portableRelative(root, benchmarkReportPath),
+    runs: outputs.map((item) => ({
+      caseId: item.caseId,
+      extractorId: args.extractorId,
+      candidatePath: item.candidatePath,
+      extractionMetadataPath: item.extractionMetadataPath,
+      reviewBurdenPath: item.reviewBurdenPath,
+    })),
+  }
+
+  await writeFile(
+    benchmarkManifestPath,
+    JSON.stringify(benchmarkManifest, null, 2) + '\n',
+    'utf8',
+  )
+  await writeFile(
+    experimentManifestPath,
+    JSON.stringify(experimentManifest, null, 2) + '\n',
+    'utf8',
+  )
+
   const report = {
     schemaVersion: '0.1.0',
     dataset: manifest.dataset,
@@ -396,7 +529,10 @@ async function main() {
     pixelsPerMeter: args.pixelsPerMeter,
     caseCount: outputs.length,
     dryRun: args.dryRun,
-    cases: outputs,
+    benchmarkManifestPath: portableRelative(root, benchmarkManifestPath),
+    benchmarkReportPath: portableRelative(root, benchmarkReportPath),
+    experimentManifestPath: portableRelative(root, experimentManifestPath),
+    cases: outputs.map(({ sourcePath, groundTruthPath, reviewBurdenPath, ...item }) => item),
   }
 
   const output = JSON.stringify(report, null, 2) + '\n'
@@ -412,6 +548,18 @@ async function main() {
       'Cases · ' + outputs.length,
       'Mode · ' + (args.dryRun ? 'dry-run' : 'extract'),
       'Report · ' + reportPath,
+      'Benchmark Manifest · ' + benchmarkManifestPath,
+      'Experiment Manifest · ' + experimentManifestPath,
+      '',
+      'Next · pnpm floorplan:benchmark -- ' +
+        benchmarkManifestPath +
+        ' --report ' +
+        benchmarkReportPath,
+      'Then · pnpm floorplan:pilot -- ' +
+        experimentManifestPath +
+        ' --min-cases ' +
+        args.minCases +
+        ' --require-corpus-coverage --require-complete-review --require-complete-metadata',
       '',
     ].join('\n'),
   )
