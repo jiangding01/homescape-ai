@@ -1,0 +1,259 @@
+{
+  "schemaVersion": "0.1.0",
+  "source": {
+    "kind": "floorplan_image",
+    "sourceLabel": "geometry-plan-b",
+    "widthPx": 1200,
+    "heightPx": 900
+  },
+  "calibration": {
+    "startPx": [
+      102,
+      818
+    ],
+    "endPx": [
+      702,
+      818
+    ],
+    "realDistanceMeters": 6,
+    "confidence": 0.99
+  },
+  "assumptions": {
+    "wallThicknessMeters": 0.12,
+    "ceilingHeightMeters": 2.75
+  },
+  "walls": [
+    {
+      "id": "wb-top",
+      "startPx": [
+        102,
+        142
+      ],
+      "endPx": [
+        1118,
+        142
+      ],
+      "confidence": 0.99
+    },
+    {
+      "id": "wb-bottom",
+      "startPx": [
+        102,
+        818
+      ],
+      "endPx": [
+        1118,
+        818
+      ],
+      "confidence": 0.99
+    },
+    {
+      "id": "wb-left",
+      "startPx": [
+        102,
+        142
+      ],
+      "endPx": [
+        102,
+        818
+      ],
+      "confidence": 0.99
+    },
+    {
+      "id": "wb-right",
+      "startPx": [
+        1118,
+        142
+      ],
+      "endPx": [
+        1118,
+        818
+      ],
+      "confidence": 0.99
+    },
+    {
+      "id": "wb-mid-h-left",
+      "startPx": [
+        102,
+        480
+      ],
+      "endPx": [
+        760,
+        480
+      ],
+      "confidence": 0.98
+    },
+    {
+      "id": "wb-mid-h-right",
+      "startPx": [
+        760,
+        500
+      ],
+      "endPx": [
+        1118,
+        500
+      ],
+      "confidence": 0.98
+    },
+    {
+      "id": "wb-v1",
+      "startPx": [
+        450,
+        142
+      ],
+      "endPx": [
+        450,
+        480
+      ],
+      "confidence": 0.98
+    },
+    {
+      "id": "wb-v2",
+      "startPx": [
+        760,
+        142
+      ],
+      "endPx": [
+        760,
+        818
+      ],
+      "confidence": 0.98
+    }
+  ],
+  "roomSeeds": [
+    {
+      "id": "geo-b-living",
+      "pointPx": [
+        350,
+        650
+      ],
+      "name": "客厅",
+      "type": "living",
+      "confidence": 0.96
+    },
+    {
+      "id": "geo-b-kitchen",
+      "pointPx": [
+        250,
+        300
+      ],
+      "name": "厨房",
+      "type": "kitchen",
+      "confidence": 0.94
+    },
+    {
+      "id": "geo-b-hallway",
+      "pointPx": [
+        600,
+        300
+      ],
+      "name": "走廊",
+      "type": "hallway",
+      "confidence": 0.91
+    },
+    {
+      "id": "geo-b-bedroom",
+      "pointPx": [
+        900,
+        300
+      ],
+      "name": "主卧",
+      "type": "bedroom",
+      "confidence": 0.95
+    },
+    {
+      "id": "geo-b-balcony",
+      "pointPx": [
+        900,
+        650
+      ],
+      "name": "阳台",
+      "type": "balcony",
+      "confidence": 0.93
+    }
+  ],
+  "openings": [
+    {
+      "id": "geo-b-o1",
+      "kind": "opening",
+      "centerPx": [
+        591,
+        480
+      ],
+      "widthPx": 142,
+      "orientation": "horizontal",
+      "roomSeedId": "geo-b-living",
+      "heightMeters": 2.4,
+      "confidence": 0.94
+    },
+    {
+      "id": "geo-b-o2",
+      "kind": "door",
+      "centerPx": [
+        450,
+        321.5
+      ],
+      "widthPx": 91,
+      "orientation": "vertical",
+      "roomSeedId": "geo-b-kitchen",
+      "heightMeters": 2.1,
+      "swing": "sliding",
+      "confidence": 0.9
+    },
+    {
+      "id": "geo-b-o3",
+      "kind": "door",
+      "centerPx": [
+        760,
+        341.5
+      ],
+      "widthPx": 91,
+      "orientation": "vertical",
+      "roomSeedId": "geo-b-hallway",
+      "heightMeters": 2.1,
+      "swing": "right",
+      "confidence": 0.88
+    },
+    {
+      "id": "geo-b-o4",
+      "kind": "opening",
+      "centerPx": [
+        760,
+        660.5
+      ],
+      "widthPx": 161,
+      "orientation": "vertical",
+      "roomSeedId": "geo-b-living",
+      "heightMeters": 2.3,
+      "confidence": 0.91
+    },
+    {
+      "id": "geo-b-o5",
+      "kind": "window",
+      "centerPx": [
+        1118,
+        321
+      ],
+      "widthPx": 198,
+      "orientation": "vertical",
+      "roomSeedId": "geo-b-bedroom",
+      "heightMeters": 1.7,
+      "sillHeightMeters": 0.75,
+      "confidence": 0.92
+    },
+    {
+      "id": "geo-b-o6",
+      "kind": "window",
+      "centerPx": [
+        1118,
+        681
+      ],
+      "widthPx": 218,
+      "orientation": "vertical",
+      "roomSeedId": "geo-b-balcony",
+      "heightMeters": 1.8,
+      "sillHeightMeters": 0.7,
+      "confidence": 0.9
+    }
+  ]
+}

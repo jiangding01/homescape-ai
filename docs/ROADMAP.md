@@ -230,6 +230,31 @@
 - [ ] 去敏真实 10 Case Pilot
 - [ ] CV / Geometry Baseline 实际跑数
 
+## PR #15 — Orthogonal Geometry Reconstruction Baseline
+
+- [x] Geometry Observation v0.1 Contract
+- [x] FloorPlanGeometryDetector Contract
+- [x] Detector / Reconstruction 解耦
+- [x] Near-axis Wall Normalization
+- [x] Wall Coordinate Snap / Cluster
+- [x] Blocked-edge Grid Reconstruction
+- [x] Room Seed Flood Fill
+- [x] 多 Seed 同连通域冲突 Gate
+- [x] Rectangular / L-shape Polygon Reconstruction
+- [x] Collinear Vertex Simplification
+- [x] Opening → Room Edge Mapping
+- [x] Opening Room Hint / Ambiguity Warning
+- [x] Opening Height / Sill vs Ceiling Gate
+- [x] Low Confidence Warning
+- [x] GeometryFloorPlanExtractor Composition
+- [x] Detector Output Runtime Validation
+- [x] Observation → Candidate CLI
+- [x] Plan A / Plan B / L-shape Smoke Fixture
+- [ ] Raw PNG / JPEG Geometry Detector
+- [ ] PDF Rasterization
+- [ ] OCR / Dimension Detector
+- [ ] 去敏真实 10 Case 跑数
+
 ## P1 — Real Room Vertical Slice
 
 目标：证明真实产品价值，而不是完成整个平台。
@@ -252,20 +277,21 @@
 
 ## 下一阶段候选
 
-### PR #15 — First Real Geometry Baseline
+### PR #16 — Real Image Geometry Detector + 10 Case Pilot
 
-PR #14 已把真实 Pilot 的数据 Join、完整性 Gate、结构指标、Human Review 与 Runtime Metadata 聚合链路固定下来。
+PR #15 已把“Detector 观测结果 → 可评测 FloorPlanDraft”的确定性几何重建核心固定下来，并且没有把算法绑定到 OpenCV、VLM 或某个 Vendor。
 
-下一步必须开始使用真实输入：
+下一步需要把真实像素接到 Geometry Observation：
 
 1. 准备第一批 10 张去敏真实户型图
 2. 用 PR #13 Workbench 完成 Ground Truth
 3. 跑 PR #12 Corpus Check 生成真实 datasetFingerprint
-4. 接第一个 CV / Geometry Baseline
-5. 生成 Candidate + Extraction Metadata
-6. 人工 Review 并导出 Burden
-7. 跑 PR #11 Benchmark + PR #14 Pilot Report
-8. 根据失败类型决定是否增加 VLM Semantic / Hybrid
+4. 实现第一个 Raw Image Geometry Detector
+5. 输出 Wall / Room Seed / Opening / Calibration Observation
+6. PR #15 Reconstructor 生成 Candidate
+7. 人工 Review + Burden
+8. PR #11 Benchmark + PR #14 Pilot Report
+9. 根据 Failure Slice 决定是否加入 VLM Semantic / OCR / Hybrid
 
 
 ### Technical Spikes
