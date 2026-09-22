@@ -213,6 +213,44 @@ Fixture 中故意加入短家具 / 文本样式线段，用于验证默认 minWa
 
 这些问题不应该继续靠 Synthetic Fixture 猜参数。
 
+## Real Corpus Batch
+
+PR #17 增加批处理入口：
+
+~~~bash
+pnpm floorplan:raster:batch -- \
+  .floorplan-corpus/corpus.json \
+  --min-cases 10 \
+  --pixels-per-meter 100
+~~~
+
+该命令会先执行 Corpus Gate，生成 / 刷新：
+
+~~~text
+.floorplan-corpus/reports/corpus-summary.json
+~~~
+
+只有 Corpus 与 Ground Truth 完整后，才会继续为全部 PNG / JPEG Case 生成：
+
+~~~text
+candidates/raster-orthogonal-v0.1/<case-id>.json
+metadata/raster-orthogonal-v0.1/<case-id>.json
+reports/raster-batch.json
+~~~
+
+其中 sourceId 固定使用匿名 caseId，不使用原始文件名。Batch Report 记录 datasetFingerprint，便于后续 Benchmark / Pilot 核对数据版本。
+
+需要先只检查 Corpus 与输出计划时可使用：
+
+~~~bash
+pnpm floorplan:raster:batch -- \
+  .floorplan-corpus/corpus.json \
+  --min-cases 10 \
+  --dry-run
+~~~
+
+Batch 当前故意只接受 floorplan_image + PNG / JPEG；PDF 仍属于后续 Rasterization Scope。
+
 ## 下一步
 
 PR #17 使用真实 10 Case 跑：
