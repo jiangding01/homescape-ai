@@ -34,3 +34,6 @@ jobs:
 
       - name: Raster geometry smoke
         run: pnpm floorplan:raster:check-demo
+
+      - name: Pilot evaluation smoke
+        run: pnpm floorplan:pilot:check-demo
