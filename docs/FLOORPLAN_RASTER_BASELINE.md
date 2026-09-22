@@ -236,7 +236,16 @@ pnpm floorplan:raster:batch -- \
 candidates/raster-orthogonal-v0.1/<case-id>.json
 metadata/raster-orthogonal-v0.1/<case-id>.json
 reports/raster-batch.json
+benchmark-raster.json
+experiment-raster.json
 ~~~
+
+其中：
+
+- `benchmark-raster.json` 已引用 Ground Truth 与本轮 Raster Candidate；
+- `experiment-raster.json` 已引用 datasetFingerprint、Candidate、Metadata 与预期 Review Burden 路径；
+- Benchmark Report 默认目标为 `reports/benchmark-raster.json`；
+- Review Burden 文件仍必须由 PR #13 Workbench 的真实人工 Review 产生，不自动伪造。
 
 其中 sourceId 固定使用匿名 caseId，不使用原始文件名。Batch Report 记录 datasetFingerprint，便于后续 Benchmark / Pilot 核对数据版本。
 
@@ -250,6 +259,32 @@ pnpm floorplan:raster:batch -- \
 ~~~
 
 Batch 当前故意只接受 floorplan_image + PNG / JPEG；PDF 仍属于后续 Rasterization Scope。
+
+完成 Batch 后：
+
+~~~bash
+pnpm floorplan:benchmark -- \
+  .floorplan-corpus/benchmark-raster.json \
+  --report .floorplan-corpus/reports/benchmark-raster.json
+~~~
+
+人工 Review 并把 Sidecar 放入：
+
+~~~text
+.floorplan-corpus/review/raster-orthogonal-v0.1/<case-id>.json
+~~~
+
+然后：
+
+~~~bash
+pnpm floorplan:pilot -- \
+  .floorplan-corpus/experiment-raster.json \
+  --min-cases 10 \
+  --require-corpus-coverage \
+  --require-complete-review \
+  --require-complete-metadata \
+  --report .floorplan-corpus/reports/pilot-raster.json
+~~~
 
 ## 下一步
 
