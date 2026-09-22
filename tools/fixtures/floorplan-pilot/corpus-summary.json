@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "0.1.0",
+  "dataset": "fixture-corpus-smoke-v1",
+  "checkedAt": "2026-09-22T00:00:00.000Z",
+  "datasetFingerprint": "1111111111111111111111111111111111111111111111111111111111111111",
+  "caseCount": 2,
+  "totalSourceBytes": 2,
+  "roomCount": 10,
+  "openingCount": 11,
+  "distributions": {
+    "sourceKind": {
+      "floorplan_image": 2
+    },
+    "quality": {
+      "clean": 2
+    },
+    "geometry": {
+      "rectangular": 2
+    },
+    "annotation": {
+      "partial_dimension": 2
+    },
+    "layout": {
+      "multi_room": 1,
+      "open_plan": 1
+    },
+    "symbols": {
+      "standard": 2
+    },
+    "textDensity": {
+      "normal": 2
+    }
+  },
+  "cases": [
+    {
+      "id": "plan-a",
+      "caseFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceBytes": 1,
+      "sourceSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "groundTruthSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "roomCount": 5,
+      "openingCount": 5
+    },
+    {
+      "id": "plan-b",
+      "caseFingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "sourceBytes": 1,
+      "sourceSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "groundTruthSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "roomCount": 5,
+      "openingCount": 6
+    }
+  ]
+}

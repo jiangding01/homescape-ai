@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "0.1.0",
+  "sourceId": "plan-b",
+  "generatedAt": "2026-09-22T00:00:00.000Z",
+  "metadata": {
+    "extractorId": "degraded-json",
+    "provider": "fixture",
+    "model": "degraded-json-v1",
+    "latencyMs": 10,
+    "costUsd": 0
+  }
+}

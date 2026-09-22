@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "0.1.0",
+  "dataset": "fixture-corpus-smoke-v1",
+  "generatedAt": "2026-09-22T00:00:00.000Z",
+  "thresholds": {},
+  "caseCount": 2,
+  "resultCount": 4,
+  "expectationMismatch": false,
+  "results": [
+    {
+      "caseId": "plan-a",
+      "extractorId": "reference-json",
+      "gatePass": true,
+      "metrics": {
+        "draftValid": true,
+        "sourceKindMatch": true,
+        "sourceDimensionsMatch": true,
+        "roomPrecision": 1,
+        "roomRecall": 1,
+        "meanRoomIou": 1,
+        "roomTypeAccuracy": 1,
+        "maxCandidateRoomOverlapRatio": 0,
+        "openingPrecision": 1,
+        "openingRecall": 1,
+        "meanOpeningCenterErrorRatio": 0,
+        "meanOpeningWidthErrorRatio": 0,
+        "scaleErrorRatio": 0
+      },
+      "failures": []
+    },
+    {
+      "caseId": "plan-b",
+      "extractorId": "reference-json",
+      "gatePass": true,
+      "metrics": {
+        "draftValid": true,
+        "sourceKindMatch": true,
+        "sourceDimensionsMatch": true,
+        "roomPrecision": 1,
+        "roomRecall": 1,
+        "meanRoomIou": 1,
+        "roomTypeAccuracy": 1,
+        "maxCandidateRoomOverlapRatio": 0,
+        "openingPrecision": 1,
+        "openingRecall": 1,
+        "meanOpeningCenterErrorRatio": 0,
+        "meanOpeningWidthErrorRatio": 0,
+        "scaleErrorRatio": 0
+      },
+      "failures": []
+    },
+    {
+      "caseId": "plan-a",
+      "extractorId": "degraded-json",
+      "gatePass": false,
+      "metrics": {
+        "draftValid": true,
+        "sourceKindMatch": true,
+        "sourceDimensionsMatch": true,
+        "roomPrecision": 0.75,
+        "roomRecall": 0.6,
+        "meanRoomIou": 0.68,
+        "roomTypeAccuracy": 0.67,
+        "maxCandidateRoomOverlapRatio": 0.12,
+        "openingPrecision": 0.6,
+        "openingRecall": 0.6,
+        "meanOpeningCenterErrorRatio": 0.03,
+        "meanOpeningWidthErrorRatio": 0.22,
+        "scaleErrorRatio": 0.08
+      },
+      "failures": [
+        "room_recall_below_threshold"
+      ]
+    },
+    {
+      "caseId": "plan-b",
+      "extractorId": "degraded-json",
+      "gatePass": false,
+      "metrics": {
+        "draftValid": true,
+        "sourceKindMatch": true,
+        "sourceDimensionsMatch": true,
+        "roomPrecision": 0.75,
+        "roomRecall": 0.6,
+        "meanRoomIou": 0.62,
+        "roomTypeAccuracy": 0.67,
+        "maxCandidateRoomOverlapRatio": 0.12,
+        "openingPrecision": 0.6,
+        "openingRecall": 0.4,
+        "meanOpeningCenterErrorRatio": 0.03,
+        "meanOpeningWidthErrorRatio": 0.22,
+        "scaleErrorRatio": 0.08
+      },
+      "failures": [
+        "room_iou_below_threshold",
+        "opening_recall_below_threshold"
+      ]
+    }
+  ],
+  "extractors": []
+}

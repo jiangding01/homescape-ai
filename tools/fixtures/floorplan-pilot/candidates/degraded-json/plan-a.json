@@ -1,0 +1,147 @@
+{
+  "schemaVersion": "0.1.0",
+  "source": {
+    "kind": "floorplan_image",
+    "widthPx": 1080,
+    "heightPx": 840,
+    "sourceLabel": "degraded-plan-a"
+  },
+  "calibration": {
+    "startPx": [
+      80,
+      760
+    ],
+    "endPx": [
+      680,
+      760
+    ],
+    "realDistanceMeters": 5.4
+  },
+  "assumptions": {
+    "wallThicknessMeters": 0.12,
+    "ceilingHeightMeters": 2.8,
+    "wallThicknessConfirmed": false,
+    "ceilingHeightConfirmed": false
+  },
+  "rooms": [
+    {
+      "id": "bad-a-1",
+      "name": "客餐厅",
+      "type": "dining",
+      "boundaryPx": [
+        [
+          90,
+          430
+        ],
+        [
+          670,
+          430
+        ],
+        [
+          670,
+          750
+        ],
+        [
+          90,
+          750
+        ]
+      ],
+      "confidence": 0.7
+    },
+    {
+      "id": "bad-a-2",
+      "name": "卧室",
+      "type": "bedroom",
+      "boundaryPx": [
+        [
+          690,
+          430
+        ],
+        [
+          990,
+          430
+        ],
+        [
+          990,
+          750
+        ],
+        [
+          690,
+          750
+        ]
+      ],
+      "confidence": 0.72
+    },
+    {
+      "id": "bad-a-3",
+      "name": "厨房",
+      "type": "kitchen",
+      "boundaryPx": [
+        [
+          90,
+          130
+        ],
+        [
+          410,
+          130
+        ],
+        [
+          410,
+          410
+        ],
+        [
+          90,
+          410
+        ]
+      ],
+      "confidence": 0.68
+    },
+    {
+      "id": "bad-a-4",
+      "name": "次卧",
+      "type": "other",
+      "boundaryPx": [
+        [
+          690,
+          130
+        ],
+        [
+          990,
+          130
+        ],
+        [
+          990,
+          410
+        ],
+        [
+          690,
+          410
+        ]
+      ],
+      "confidence": 0.6
+    }
+  ],
+  "openings": [
+    {
+      "id": "bad-a-o1",
+      "roomId": "bad-a-1",
+      "edgeIndex": 0,
+      "kind": "door",
+      "offsetPx": 200,
+      "widthPx": 90,
+      "heightMeters": 2.1,
+      "confidence": 0.6
+    },
+    {
+      "id": "bad-a-o2",
+      "roomId": "bad-a-2",
+      "edgeIndex": 2,
+      "kind": "window",
+      "offsetPx": 60,
+      "widthPx": 170,
+      "heightMeters": 1.8,
+      "sillHeightMeters": 0.7,
+      "confidence": 0.7
+    }
+  ]
+}

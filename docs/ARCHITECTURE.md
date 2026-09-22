@@ -1,4 +1,4 @@
-# HomeScape AI Architecture v0.13
+# HomeScape AI Architecture v0.14
 
 ## 1. 当前端到端闭环
 
@@ -363,3 +363,73 @@ source image dimensions
 PR #13 只支持图片 Overlay；PDF 仍需要 Rasterization / Page Selection。
 
 当前可以拖动已有 Room Polygon 顶点，但尚未提供增删顶点和 Opening Edge 重新绑定。这些应该在真实 Corpus Pilot 暴露真实需求后再补，不提前堆编辑器复杂度。
+
+
+## 14. Pilot Evaluation Plane
+
+PR #14 把 Extractor Evaluation 从单一 Benchmark 扩展成一次完整 Experiment：
+
+~~~text
+Corpus Manifest
++ Corpus Summary / Dataset Fingerprint
++ Benchmark Report
++ Extraction Metadata
++ Human Review Burden
+        ↓
+Pilot Evaluation
+        ↓
+Per Case Result
++ Per Extractor Aggregate
++ Corpus Tag Slices
++ Data Quality Report
++ Pilot Fingerprint
+~~~
+
+### 为什么 Benchmark 不直接塞进 Review 指标
+
+PR #11 Benchmark 仍保持纯结构评测：
+
+~~~text
+Ground Truth
+vs
+Candidate FloorPlanDraft
+~~~
+
+Human Review、Provider Metadata 属于实验上下文，不应该污染几何 Benchmark 的确定性输入。
+
+因此 PR #14 使用独立 Join Layer，把各类 Sidecar 在 caseId + extractorId 上关联。
+
+### Reproducibility
+
+真实实验至少锁定：
+
+~~~text
+datasetFingerprint
+benchmarkSha256
+pilotFingerprint
+extractorId
+provider / model
+~~~
+
+这避免同名数据集或同名模型在内容已经变化时仍被当成同一轮结果。
+
+### Selection Signal
+
+后续技术选型建议同时观察：
+
+~~~text
+Structure Quality
+Human Review Duration
+Human Edit Count
+Failure Slice
+Latency
+Cost
+~~~
+
+例如全局 IoU 类似时，irregular / scanned 子集和人工修正时间可能会暴露明显差异。
+
+### 真实数据边界
+
+PR #14 仍不根据 Synthetic Fixture 得出 CV / VLM 结论。
+
+Geometry Baseline 的算法实现和参数冻结应在第一批真实 10 Case 到位后进行，避免针对演示图形过拟合。

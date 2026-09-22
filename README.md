@@ -99,6 +99,7 @@ TYPESAFE_MODEL=jev-latest
 pnpm floorplan:benchmark
 pnpm floorplan:extract-demo
 pnpm floorplan:corpus:check-demo
+pnpm floorplan:pilot:check-demo
 ~~~
 
 真实结构化数据：
@@ -114,7 +115,7 @@ pnpm floorplan:extract -- input.json output.json \
 pnpm floorplan:corpus -- .floorplan-corpus/corpus.json --min-cases 30
 ~~~
 
-说明见 [Floor Plan Extractor Benchmark](docs/FLOORPLAN_EXTRACTOR_BENCHMARK.md)、[Real Floor Plan Corpus](docs/FLOORPLAN_CORPUS.md) 与 [Ground Truth Annotation](docs/FLOORPLAN_ANNOTATION.md)。
+说明见 [Floor Plan Extractor Benchmark](docs/FLOORPLAN_EXTRACTOR_BENCHMARK.md)、[Real Floor Plan Corpus](docs/FLOORPLAN_CORPUS.md)、[Ground Truth Annotation](docs/FLOORPLAN_ANNOTATION.md) 与 [Pilot Evaluation](docs/FLOORPLAN_PILOT.md)。
 
 ## 资产入库
 
@@ -133,5 +134,6 @@ Production Policy 示例见 tools/fixtures/asset-ingestion/production-policy.exa
 - [户型 Extractor Benchmark](docs/FLOORPLAN_EXTRACTOR_BENCHMARK.md)
 - [真实户型 Corpus](docs/FLOORPLAN_CORPUS.md)
 - [Ground Truth 标注](docs/FLOORPLAN_ANNOTATION.md)
+- [Pilot Evaluation](docs/FLOORPLAN_PILOT.md)
 - [路线图](docs/ROADMAP.md)
 - [ADR](docs/adr/)
