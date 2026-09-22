@@ -49,6 +49,23 @@ Experiment：
 
 所有引用文件必须位于 Experiment Manifest 所在目录之内，realpath 后也不能越界。
 
+对于 PR #17 Raster Pilot，不需要手工拼装这份 Manifest。运行：
+
+~~~bash
+pnpm floorplan:raster:batch -- \
+  .floorplan-corpus/corpus.json \
+  --min-cases 10
+~~~
+
+会自动生成：
+
+~~~text
+.floorplan-corpus/benchmark-raster.json
+.floorplan-corpus/experiment-raster.json
+~~~
+
+Experiment 中的 Review Burden 路径只作为待填位置；真实 Sidecar 仍由 Workbench 人工 Review 导出。
+
 ## 运行
 
 ~~~bash
