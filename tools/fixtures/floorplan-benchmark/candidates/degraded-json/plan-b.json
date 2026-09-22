@@ -1,0 +1,147 @@
+{
+  "schemaVersion": "0.1.0",
+  "source": {
+    "kind": "floorplan_image",
+    "widthPx": 1200,
+    "heightPx": 900,
+    "sourceLabel": "degraded-plan-b"
+  },
+  "calibration": {
+    "startPx": [
+      100,
+      820
+    ],
+    "endPx": [
+      700,
+      820
+    ],
+    "realDistanceMeters": 6.5
+  },
+  "assumptions": {
+    "wallThicknessMeters": 0.15,
+    "ceilingHeightMeters": 2.8,
+    "wallThicknessConfirmed": false,
+    "ceilingHeightConfirmed": false
+  },
+  "rooms": [
+    {
+      "id": "bad-b-l",
+      "name": "客厅",
+      "type": "living",
+      "boundaryPx": [
+        [
+          110,
+          490
+        ],
+        [
+          745,
+          490
+        ],
+        [
+          745,
+          810
+        ],
+        [
+          110,
+          810
+        ]
+      ],
+      "confidence": 0.71
+    },
+    {
+      "id": "bad-b-k",
+      "name": "厨房",
+      "type": "other",
+      "boundaryPx": [
+        [
+          110,
+          150
+        ],
+        [
+          440,
+          150
+        ],
+        [
+          440,
+          470
+        ],
+        [
+          110,
+          470
+        ]
+      ],
+      "confidence": 0.65
+    },
+    {
+      "id": "bad-b-b",
+      "name": "主卧",
+      "type": "bedroom",
+      "boundaryPx": [
+        [
+          775,
+          150
+        ],
+        [
+          1110,
+          150
+        ],
+        [
+          1110,
+          490
+        ],
+        [
+          775,
+          490
+        ]
+      ],
+      "confidence": 0.69
+    },
+    {
+      "id": "bad-b-extra",
+      "name": "未知",
+      "type": "other",
+      "boundaryPx": [
+        [
+          450,
+          150
+        ],
+        [
+          745,
+          150
+        ],
+        [
+          745,
+          470
+        ],
+        [
+          450,
+          470
+        ]
+      ],
+      "confidence": 0.4
+    }
+  ],
+  "openings": [
+    {
+      "id": "bad-b-o1",
+      "roomId": "bad-b-l",
+      "edgeIndex": 0,
+      "kind": "door",
+      "offsetPx": 250,
+      "widthPx": 100,
+      "heightMeters": 2.1,
+      "confidence": 0.5
+    },
+    {
+      "id": "bad-b-o2",
+      "roomId": "bad-b-b",
+      "edgeIndex": 1,
+      "kind": "window",
+      "offsetPx": 100,
+      "widthPx": 140,
+      "heightMeters": 1.7,
+      "sillHeightMeters": 0.75,
+      "confidence": 0.55
+    }
+  ]
+}

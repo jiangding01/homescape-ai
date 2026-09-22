@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <rect width="1200" height="900" fill="#f7f5ef"/>
+  <g fill="none" stroke="#242620" stroke-width="10" stroke-linejoin="round">
+    <path d="M100 140H1120V820H100Z"/>
+    <path d="M450 140V480"/>
+    <path d="M760 140V820"/>
+    <path d="M100 480H760"/>
+    <path d="M760 500H1120"/>
+  </g>
+  <g stroke="#f7f5ef" stroke-width="14">
+    <path d="M520 480H660"/>
+    <path d="M450 275V365"/>
+    <path d="M760 295V385"/>
+    <path d="M760 580V740"/>
+    <path d="M1120 220V420"/>
+    <path d="M1120 570V790"/>
+  </g>
+  <g fill="none" stroke="#9a5b42" stroke-width="4">
+    <path d="M450 275L525 325"/>
+    <path d="M760 295L690 350"/>
+  </g>
+  <g fill="none" stroke="#4d7d9a" stroke-width="4">
+    <path d="M1116 220V420M1124 220V420"/>
+    <path d="M1116 570V790M1124 570V790"/>
+  </g>
+  <g font-family="Arial, sans-serif" font-size="30" fill="#45473f">
+    <text x="205" y="320">厨房</text>
+    <text x="535" y="320">走廊</text>
+    <text x="885" y="320">主卧</text>
+    <text x="320" y="660">客厅</text>
+    <text x="875" y="675">阳台</text>
+  </g>
+  <g stroke="#8a4d32" stroke-width="4" fill="none">
+    <path d="M100 855H700"/>
+    <path d="M100 843V867M700 843V867"/>
+  </g>
+  <text x="360" y="890" font-family="Arial, sans-serif" font-size="22" fill="#8a4d32">6.0 m</text>
+</svg>

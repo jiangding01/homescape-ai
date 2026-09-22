@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="840" viewBox="0 0 1080 840">
+  <rect width="1080" height="840" fill="#f8f6f0"/>
+  <g fill="none" stroke="#20231f" stroke-width="10" stroke-linejoin="round">
+    <path d="M80 120H1000V760H80Z"/>
+    <path d="M420 120V420"/>
+    <path d="M680 120V760"/>
+    <path d="M80 420H1000"/>
+  </g>
+  <g stroke="#f8f6f0" stroke-width="14">
+    <path d="M420 295V385"/>
+    <path d="M680 225V315"/>
+    <path d="M470 420H590"/>
+    <path d="M290 760H530"/>
+    <path d="M735 760H945"/>
+  </g>
+  <g fill="none" stroke="#9a5b42" stroke-width="4">
+    <path d="M420 295L500 345"/>
+    <path d="M680 315L610 255"/>
+  </g>
+  <g fill="none" stroke="#4d7d9a" stroke-width="4">
+    <path d="M290 756H530M290 764H530"/>
+    <path d="M735 756H945M735 764H945"/>
+  </g>
+  <g font-family="Arial, sans-serif" font-size="30" fill="#444">
+    <text x="185" y="285">厨房</text>
+    <text x="500" y="285">走廊</text>
+    <text x="815" y="285">次卧</text>
+    <text x="300" y="610">客餐厅</text>
+    <text x="805" y="610">卧室</text>
+  </g>
+  <g stroke="#8a4d32" stroke-width="4" fill="none">
+    <path d="M80 790H680"/>
+    <path d="M80 778V802M680 778V802"/>
+  </g>
+  <text x="340" y="825" font-family="Arial, sans-serif" font-size="22" fill="#8a4d32">6.0 m</text>
+</svg>

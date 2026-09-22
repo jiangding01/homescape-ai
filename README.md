@@ -35,6 +35,7 @@ packages/
 ├── domain                  # DesignState / Operation / Revision
 ├── catalog                 # SKU / dimensions / placement rules
 ├── asset-pipeline          # Production Asset Ingestion / Geometry QA
+├── floorplan-extractor     # Floor Plan Extractor / Benchmark Contract
 ├── planner                 # Rule + Anchor + Constraint + Scoring
 ├── ai-runtime              # Capability abstraction + JEV Provider
 ├── design-intelligence     # 家装自然语言 → DesignOperation
@@ -80,17 +81,23 @@ TYPESAFE_MODEL=jev-latest
 
 ## 当前阶段
 
-已完成 Foundation、HomeSpatialModel、参数化 3D、Design State / Revision、Catalog / Planner、自然语言 Decision Runtime、Real Floor Plan + Active Workspace、glTF / GLB Runtime，以及 Production Asset Ingestion / Geometry QA Gate。
+已完成 Foundation、HomeSpatialModel、参数化 3D、Design State / Revision、Catalog / Planner、自然语言 Decision Runtime、Real Floor Plan + Active Workspace、glTF / GLB Runtime、Production Asset Ingestion，以及 Floor Plan Extractor Benchmark 基础设施。
 
-生产资产现在通过独立 Manifest 进入离线检查：模型 World Bounds 会和 Catalog 尺寸比对，同时检查 Pivot、三角面、文件/纹理预算、LOD、Meshopt/KTX2 与自包含 GLB 策略；整批资产只有全部通过后才生成可激活 Release Manifest。
+户型识别现在有独立 FloorPlanExtractor Contract 与离线 Benchmark Gate，可以用统一指标比较公司结构化数据、CV、VLM 或 Hybrid 输出，而不把业务绑定到某个 Provider。
 
-仓库内的 7 个 glTF 仍然只是 Pipeline Fixture，不代表公司生产 SKU。PR #10 也没有伪造 FBX/OBJ/USD 转换或 Meshopt/KTX2 编码能力，这些保留为后续 Processor Adapter。
-
-今天的开发停在 PR #10。下一次继续时，优先进入真实户型 Extractor Benchmark。
+仓库自带的 2 张 SVG 仅用于验证 Benchmark Harness 的正反样例，不代表真实模型效果。下一阶段必须先建立 30~50 张真实户型图 / PDF Corpus，再接实际 Extractor Adapter 跑数。
 
 目标闭环：
 
 > 真实户型图 → HomeSpatialModel → 客厅方案 → 自然语言连续修改 → 实时 3D → Undo / Replay / Save。
+
+## 户型 Extractor Benchmark
+
+~~~bash
+pnpm floorplan:benchmark
+~~~
+
+说明与真实 Corpus 规范见 [Floor Plan Extractor Benchmark](docs/FLOORPLAN_EXTRACTOR_BENCHMARK.md)。
 
 ## 资产入库
 
@@ -106,5 +113,6 @@ Production Policy 示例见 tools/fixtures/asset-ingestion/production-policy.exa
 
 - [架构设计](docs/ARCHITECTURE.md)
 - [资产流水线](docs/ASSET_PIPELINE.md)
+- [户型 Extractor Benchmark](docs/FLOORPLAN_EXTRACTOR_BENCHMARK.md)
 - [路线图](docs/ROADMAP.md)
 - [ADR](docs/adr/)

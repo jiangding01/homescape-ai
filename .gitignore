@@ -4,6 +4,7 @@ node_modules
 dist
 coverage
 .asset-release
+.floorplan-benchmark
 .DS_Store
 .env
 .env.*

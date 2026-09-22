@@ -138,6 +138,29 @@
 - [ ] 公司真实 SKU 数据源 Adapter
 - [ ] CDN / OSS 实际上传 Adapter
 
+## PR #11 — Floor Plan Extractor Benchmark
+
+- [x] 独立 @homescape/floorplan-extractor Contract
+- [x] Vendor-neutral Extractor Input / Result / Metadata
+- [x] Benchmark Manifest v0.1
+- [x] Ground Truth / Candidate 与 Extractor ID 解耦
+- [x] Room Polygon Raster IoU
+- [x] Room ID 无关的几何匹配
+- [x] Room Precision / Recall / Mean IoU
+- [x] Room Type Accuracy
+- [x] Candidate Room Overlap Ratio Gate
+- [x] Opening Center / Width / Precision / Recall
+- [x] Calibration Scale Error
+- [x] Source Kind / Dimensions Gate
+- [x] Threshold-based Pass / Fail Gate
+- [x] 按 Extractor 汇总指标
+- [x] reference / degraded 正反 Smoke Fixture
+- [ ] 30~50 张真实户型图 / PDF Benchmark Corpus
+- [ ] 公司户型数据 Adapter
+- [ ] CV Extractor 实际跑数
+- [ ] VLM Extractor 实际跑数
+- [ ] Human Review 修正量 / 修正耗时指标
+
 ## P1 — Real Room Vertical Slice
 
 目标：证明真实产品价值，而不是完成整个平台。
@@ -155,21 +178,30 @@
 - [x] Finalized Import → 现有 3D Workbench 切换
 - [x] glTF / GLB 真实加载链路
 - [ ] 公司真实 SKU GLB
+- [x] Floor Plan Extractor Benchmark / Evaluation Harness
 - [ ] 真实户型自动 Extractor
 
 ## 下一阶段候选
 
-### PR #11 — Floor Plan Extractor Benchmark
+### PR #12 — Real Floor Plan Benchmark Corpus + First Extractor Adapter
 
-PR #10 后先暂停功能开发。下一次继续时，优先验证真实户型图片 / PDF → FloorPlanDraft 的 Extractor 方案与评测集，再决定 CV / VLM / 公司数据 Adapter 的组合。
+PR #11 先把评测框架和 Contract 固定下来。下一阶段不要直接在 Demo Fixture 上选型，应先收集 30~50 张真实户型图 / PDF 并完成 Ground Truth，再接入第一个实际 Extractor Adapter 跑数。
+
+优先顺序建议：
+
+1. 公司已有结构化户型数据 Adapter（若可用）
+2. CV / Geometry Baseline
+3. VLM-assisted Extractor
+4. Hybrid：CV Geometry + VLM Semantic
+
 
 ### Technical Spikes
 
-1. Floor Plan Extractor Benchmark
-2. Whole-home Runtime Benchmark
-3. AI Decision Evaluation / Shadow Model
-4. Asset Pipeline
-5. End-to-End Real Room Vertical Slice
+1. [x] Floor Plan Extractor Benchmark
+2. [ ] Whole-home Runtime Benchmark
+3. [ ] AI Decision Evaluation / Shadow Model
+4. [x] Asset Pipeline
+5. [ ] End-to-End Real Room Vertical Slice
 
 ## P2 — Whole Home
 

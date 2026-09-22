@@ -1,11 +1,14 @@
-# HomeScape AI Architecture v0.10
+# HomeScape AI Architecture v0.11
 
 ## 1. 当前端到端闭环
 
 ~~~text
-Real Floor Plan
+Real Floor Plan / PDF
+→ Floor Plan Extractor
+→ FloorPlanDraft
 → Candidate + Human Review
-→ Active HomeSpatialModel
+→ HomeSpatialModel
+→ Active Workspace
 → Natural Language
 → DesignOperation[]
 → Catalog + Planner
@@ -14,164 +17,244 @@ Real Floor Plan
 → Babylon glTF / GLB Runtime
 ~~~
 
-视觉资产链路现在进一步扩展为：
+PR #11 不选择某个识图模型，而是先建立 **Extractor Contract + Benchmark Gate**。
+
+这样后续 CV、VLM、公司已有户型数据或 Hybrid Pipeline 都必须输出同一个 FloorPlanDraft，并在同一评测集上比较。
+
+## 2. Extractor Contract
+
+@homescape/floorplan-extractor 定义：
 
 ~~~text
-Prepared glTF / GLB Candidate
-→ Production Asset Ingestion
-→ Geometry / Budget / Security QA
-→ Release Manifest
-→ CatalogRenderAsset Activation
-→ Runtime
+FloorPlanExtractorInput
+  ├── sourceId
+  ├── kind: image / pdf / company_data
+  ├── mediaType
+  └── bytes
+
+FloorPlanExtractor
+  ├── id
+  ├── supports()
+  └── extract()
+
+FloorPlanExtractionResult
+  ├── FloorPlanDraft
+  ├── metadata
+  │    ├── extractorId
+  │    ├── provider / model
+  │    ├── latency
+  │    ├── token usage
+  │    ├── cost
+  │    └── traceId
+  └── warnings
 ~~~
 
-PR #10 的重点不是在浏览器中继续增加模型修复逻辑，而是把“不合格资产不能进入 Catalog”变成可执行 Gate。
+业务代码只消费 FloorPlanDraft，不直接依赖 Provider。
 
-## 2. Asset Pipeline 边界
+## 3. 为什么先 Benchmark
 
-当前资产系统分为三层：
+户型识别不能只看“图片看起来像”。
 
-### Source / Processor
+真正影响后续 Planner / 3D 的误差包括：
 
-DCC、供应商或公司资产系统提供源模型。原始 FBX / OBJ / USD 的转换、减面、Meshopt、KTX2 等属于 Processor 层。
+- Room 漏检 / 多检
+- Room Polygon 偏移
+- 房间类型错误
+- 门窗漏检
+- Door / Window 位置偏移
+- Opening 宽度错误
+- 标尺 / 尺寸比例错误
+- Source 尺寸或类型不一致
 
-PR #10 不伪造这些能力，而是要求 Processor 产出 glTF / GLB Candidate，再由 Ingestion Gate 验证。
+因此模型选型必须落到结构化指标，而不是只靠肉眼抽查。
 
-### Production Asset Ingestion
+## 4. Benchmark Metrics
 
-新的离线 Ingestion 工具负责：
-
-- Manifest / Source Root
-- glTF / GLB 2.0 解析
-- Node Transform 后的 World Bounds
-- Catalog Dimensions QA
-- floor-center Pivot QA
-- Triangle / File / Texture Budget
-- LOD QA
-- Meshopt / KTX2 / Self-contained GLB Policy
-- 安全资源路径检查
-- SHA-256 / byteSize
-- Release Manifest
-- Activation Gate
-
-### Runtime
-
-Runtime 只加载已经激活的 CatalogRenderAsset，不承担生产资产修复职责。
-
-## 3. Geometry QA
-
-商品尺寸仍以 Catalog 为业务真值。
-
-Ingestion 根据 glTF Scene Graph，把 Mesh POSITION accessor 的 local bounds 经过 Node world transform 后计算最终 AABB：
+PR #11 首批指标：
 
 ~~~text
-POSITION min/max
-→ Node local transform
-→ parent world transform
-→ World Bounds
-→ width / height / depth
-→ compare Catalog dimensions
+Draft Validity
+Source Kind Match
+Source Dimensions Match
+
+Room
+  ├── Precision
+  ├── Recall
+  ├── Mean Polygon IoU
+  ├── Type Accuracy
+  └── Max Candidate Room Overlap Ratio
+
+Opening
+  ├── Precision
+  ├── Recall
+  ├── Center Error Ratio
+  └── Width Error Ratio
+
+Scale
+  └── Calibration Error Ratio
 ~~~
 
-同时检查：
+Room ID 不参与匹配。
+
+Candidate Room 与 Ground Truth Room 使用 Polygon IoU 做几何匹配，因此不同模型可以自由生成自己的实体 ID。
+
+## 5. Polygon IoU
+
+Benchmark 使用 deterministic raster IoU，而不是要求第三方几何依赖。
+
+每对 Polygon 在其联合 Bounds 内使用固定网格采样：
 
 ~~~text
-centerX ≈ 0
-minY    ≈ 0
-centerZ ≈ 0
-~~~
-
-以确认 floor-center Pivot。
-
-POSITION accessor 缺少 min / max 时直接阻断，因为 Ingestion 无法证明模型尺寸正确。
-
-## 4. Production Policy
-
-Policy 可按业务调整，但默认生产建议要求：
-
-- LOD0 存在
-- LOD triangle 不随级别增加
-- LOD0 / LOD1 / LOD2 都必须配置 Triangle Budget
-- LOD0 / LOD1 / LOD2 都必须配置 File Size Budget
-- Texture Edge Budget
-- self-contained GLB
-- 实际 BufferView 使用 EXT_meshopt_compression
-- 实际 Texture/Image 使用 KTX2 / KHR_texture_basisu（存在纹理时）
-- 禁止 KHR_draco_mesh_compression
-- 禁止 Animation / Skin / Morph Target
-
-Demo Fixture 可以使用宽松 Policy 验证流程，但不能因此获得 Production SKU 身份。
-
-## 5. Security
-
-Manifest 明确声明 sourceRoot。
-
-所有 sourcePath 必须位于 sourceRoot 内；检查同时使用 realpath，避免通过符号链接绕过目录边界。
-
-Catalog Asset ID 与 Release Version 会进入发布路径，因此只允许安全路径字符并禁止 . / ..。SKU 只作为业务标识与报告字段，不强行限制为路径字符集。
-
-glTF 外部 Buffer / Image：
-
-- 不允许 HTTP / HTTPS 等远程引用
-- 不允许绝对路径
-- 不允许越过模型所在目录
-
-Publish URI 由 Ingestion 生成，不直接信任 Source Filename。
-
-## 6. Transactional Release
-
-Ingestion 先完成整批 SKU 的 QA。
-
-~~~text
-inspect all assets
+Ground Truth Polygon
+        +
+Candidate Polygon
         ↓
-any blocked?
-   ├─ yes → no model files published
-   │        asset-release.blocked.json
-   └─ no  → copy bundles
-            asset-release.json
+fixed raster grid
+        ↓
+intersection samples / union samples
+        ↓
+approximate IoU
 ~~~
 
-避免“前几个 SKU 已发布、后一个 SKU 失败”形成半发布状态。
+Smoke Dataset 使用 96×96。
 
-## 7. Activation Contract
+真实 Benchmark 可以在 Manifest 中提高到 128~256，但要平衡运行成本。
 
-@homescape/asset-pipeline 提供 Release 类型和 Activation Gate。
+## 6. Opening Match
 
-只有 release.status === ready 且每个 Record 都带 renderAsset 时，才能收集成：
+Opening 不能依赖 edgeIndex 相同，因为 Candidate Polygon 顶点数量可能不同。
+
+评测先完成 Room Geometry Match，然后：
 
 ~~~text
-catalogAssetId → CatalogRenderAsset
+Ground Truth Opening
+→ matched Candidate Room
+→ same opening kind
+→ derive opening center from edge + offset + width
+→ nearest center within normalized tolerance
+→ one-to-one match
 ~~~
 
-这让后续 API / Catalog 同步可以共享同一个发布语义。
+同时记录 Width Relative Error。
 
-## 8. 当前未实现能力
+## 7. Scale
 
-PR #10 尚未内置：
-
-- FBX / OBJ / USD → glTF / GLB 转换
-- 自动 LOD 生成
-- Meshopt 编码
-- KTX2 转码
-- CDN / OSS 上传
-- 公司真实 SKU 数据源 Adapter
-
-这些是明确的 Processor / Publisher Adapter，不应该通过 Runtime 猜测补齐。
-
-## 9. P1 下一重点
-
-Real Room 的空间、设计、AI、Catalog、Render Asset 与 Production Ingestion 基础闭环已经形成。
-
-下一轮更值得优先验证的是：
+比例尺统一比较 Pixels Per Meter：
 
 ~~~text
-真实户型图片 / PDF
-→ Extractor
-→ FloorPlanDraft
-→ Benchmark
+distance(startPx, endPx)
+------------------------
+realDistanceMeters
+~~~
+
+Candidate 和 Ground Truth 的相对误差超过 Gate 即失败。
+
+这比只比较 realDistanceMeters 更稳，因为不同 Extractor 可能选择不同的标尺线段。
+
+## 8. Benchmark 与 Extractor 执行解耦
+
+当前 CLI 消费已经生成的 Candidate JSON：
+
+~~~text
+Extractor A ─┐
+Extractor B ─┼→ FloorPlanDraft JSON
+Extractor C ─┘
+                  ↓
+        floorplan-benchmark.mjs
+                  ↓
+              report.json
+~~~
+
+这样 Benchmark 本身：
+
+- 不持有 Provider API Key
+- 不受网络波动影响
+- 可以复跑相同输出
+- 可以把模型调用成本和评测成本分开
+- 可以对历史模型版本做回归
+
+后续可以增加 Runner，但不应该让 Benchmark 工具直接绑定某家 API。
+
+## 9. Smoke Fixture 与真实 Corpus
+
+仓库当前的 2 张 SVG Fixture 只用于验证 Benchmark Harness：
+
+- reference-json 应通过
+- degraded-json 应失败
+
+它们**不是模型效果结论，也不是生产 Benchmark Corpus**。
+
+模型选型前必须准备至少 30~50 张真实户型图 / PDF，并覆盖：
+
+- 标准 CAD 导出图
+- 截图 / 压缩图
+- 扫描件
+- 有 / 无尺寸标注
+- 开放式客餐厅
+- 异形房间
+- 多门窗
+- 文本遮挡
+- 旋转 / 轻微透视
+- 不同公司 / 设计软件图例风格
+
+Ground Truth 要由人工校验，而不是由另一个模型自动生成。
+
+## 10. 选型原则
+
+不要先问“VLM 还是 CV”。
+
+真实评测后再决定：
+
+~~~text
+Company Structured Data
+CV Geometry
+VLM Semantic
+Hybrid CV + VLM
+~~~
+
+可能的生产方案完全可以是 Hybrid：
+
+~~~text
+CV / Geometry
+  → walls / rooms / openings
+VLM
+  → room semantics / ambiguous symbol interpretation
+Deterministic Normalizer
+  → topology / calibration / confidence
+Human Review
+  → final correction
+~~~
+
+## 11. 下一阶段
+
+PR #12 应优先做真实 Benchmark Corpus 和第一个实际 Adapter。
+
+在真实数据量不足之前，不根据当前 2 个 Smoke Fixture 宣布任何模型或技术路线胜出。
+
+## 12. 保持不变的核心边界
+
+PR #11 只增加 Extractor / Evaluation Layer，不改变此前已经稳定的真值边界：
+
+~~~text
+HomeSpatialModel = 住宅空间真值
+DesignState      = 设计状态真值
+CatalogAsset     = 商品尺寸 / SKU / 摆放规则真值
+RenderAsset      = 视觉表达
+~~~
+
+Production Asset Ingestion 仍负责 glTF / GLB 的 Geometry QA、Pivot、LOD、Meshopt / KTX2 与 Release Gate。
+
+AI 仍只能产生 Proposal / DesignOperation，不能直接修改 HomeSpatialModel、DesignState 或 Render Scene。
+
+因此 Floor Plan Extractor 即使使用 VLM，也只能产出 FloorPlanDraft Candidate：
+
+~~~text
+Extractor Output
+→ Benchmark / Confidence
+→ Importer
 → Human Review
+→ Validation
 → HomeSpatialModel
 ~~~
 
-以补上目前 P1 最大的真实输入缺口。
+识图 Provider 不拥有住宅空间最终真值。
