@@ -3,14 +3,19 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node/index.ts"
+  },
   "dependencies": {
-    "@homescape/spatial-model": "workspace:*"
+    "@homescape/spatial-model": "workspace:*",
+    "sharp": "0.35.4"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/node": "^24.5.2",
     "typescript": "^5.9.2"
   }
 }
