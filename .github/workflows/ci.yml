@@ -31,3 +31,6 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Raster geometry smoke
+        run: pnpm floorplan:raster:check-demo

@@ -255,6 +255,29 @@
 - [ ] OCR / Dimension Detector
 - [ ] 去敏真实 10 Case 跑数
 
+## PR #16 — Raw Raster Geometry Detector Baseline
+
+- [x] RasterImageDecoder Contract
+- [x] Sharp PNG / JPEG Decoder
+- [x] EXIF Orientation Normalize
+- [x] Transparent Pixel → White Composite
+- [x] Input Byte / Pixel Limit
+- [x] Grayscale / Luminance Conversion
+- [x] Horizontal / Vertical Dark-run Scan
+- [x] Wall Thickness Band Merge
+- [x] Opening Gap Detection
+- [x] Geometry Connectivity → Room Seed
+- [x] Deterministic Door / Window / Opening Heuristic
+- [x] Image → Observation → Reconstructor E2E Smoke
+- [x] PNG + JPEG Smoke
+- [x] Raw Image → Candidate CLI
+- [x] Anonymous sourceId Default
+- [ ] Real 10 Case Pilot
+- [ ] OCR / Dimension Detector
+- [ ] Room Semantic Detector
+- [ ] Symbol Detector
+- [ ] PDF Rasterization
+
 ## P1 — Real Room Vertical Slice
 
 目标：证明真实产品价值，而不是完成整个平台。
@@ -277,21 +300,22 @@
 
 ## 下一阶段候选
 
-### PR #16 — Real Image Geometry Detector + 10 Case Pilot
+### PR #17 — Real 10 Case Raster Pilot
 
-PR #15 已把“Detector 观测结果 → 可评测 FloorPlanDraft”的确定性几何重建核心固定下来，并且没有把算法绑定到 OpenCV、VLM 或某个 Vendor。
+PR #16 已把 PNG / JPEG 像素接入 Geometry Observation，并通过 Synthetic E2E 验证 Decoder → Detector → Reconstructor 链路。
 
-下一步需要把真实像素接到 Geometry Observation：
+下一阶段不应该继续扩 Synthetic Heuristic，而应拿真实数据验证：
 
 1. 准备第一批 10 张去敏真实户型图
 2. 用 PR #13 Workbench 完成 Ground Truth
 3. 跑 PR #12 Corpus Check 生成真实 datasetFingerprint
-4. 实现第一个 Raw Image Geometry Detector
-5. 输出 Wall / Room Seed / Opening / Calibration Observation
-6. PR #15 Reconstructor 生成 Candidate
-7. 人工 Review + Burden
-8. PR #11 Benchmark + PR #14 Pilot Report
-9. 根据 Failure Slice 决定是否加入 VLM Semantic / OCR / Hybrid
+4. 用 PR #16 Raster Detector 生成 Candidate
+5. 人工 Review + Burden
+6. PR #11 Benchmark + PR #14 Pilot Report
+7. 按 Failure Slice 判断：
+   - wall / geometry miss → 继续 CV Geometry
+   - dimension / text → OCR
+   - room semantic / symbol ambiguity → VLM / Hybrid
 
 
 ### Technical Spikes

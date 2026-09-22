@@ -1,4 +1,4 @@
-# HomeScape AI Architecture v0.15
+# HomeScape AI Architecture v0.16
 
 ## 1. 当前端到端闭环
 
@@ -594,3 +594,107 @@ PNG / JPEG
 ~~~
 
 第一批真实 10 Case 到位后，Detector 的参数、失败分类和是否需要 VLM / OCR 才有意义。
+
+
+## 16. Raw Raster Geometry Detection
+
+PR #16 把 PR #15 的 Geometry Detector Contract 接到真实 PNG / JPEG 像素输入。
+
+~~~text
+PNG / JPEG
+   ↓
+SharpRasterImageDecoder
+   ↓
+Luminance Raster
+   ↓
+RasterGeometryDetector
+   ├── horizontal dark-run scan
+   ├── vertical dark-run scan
+   ├── wall band merge
+   ├── opening gap detect
+   └── connectivity room seeds
+   ↓
+FloorPlanGeometryObservationV01
+   ↓
+OrthogonalGeometryReconstructor
+   ↓
+FloorPlanDraft
+~~~
+
+### Decoder Boundary
+
+Node Decoder 通过 package subpath 暴露：
+
+~~~text
+@homescape/floorplan-extractor/node
+~~~
+
+Web 继续只依赖主入口，不会把 Sharp 打进浏览器 Bundle。
+
+Decoder 当前负责：
+
+- PNG / JPEG decode
+- EXIF orientation normalize
+- sRGB normalize
+- alpha composite on white
+- luminance conversion
+- maximum input pixel gate
+
+### Raster Wall Baseline
+
+RasterGeometryDetector 当前只做 classical deterministic baseline：
+
+1. 在 Row / Column 上扫描连续暗像素；
+2. 只保留达到最小长度的 run；
+3. 将相邻 scan line 合并成 wall band；
+4. 把合理宽度的白色 gap 当作 Opening Candidate；
+5. 用补全后的 Wall Topology 形成 Grid；
+6. 根据连通域生成 Room Seed；
+7. 交给 PR #15 Reconstructor 生成 Polygon。
+
+默认 minWallRunRatio 使用较保守的 8%，用于降低家具线、文字下划线、尺寸短线被误识别为墙的概率。
+
+### Opening Classification
+
+当前 Opening Kind 仍是启发式，Gap Width 使用图像短边比例而不是 provisional pixelsPerMeter，避免未知尺度直接污染 Topology：
+
+~~~text
+outer boundary gap → window
+inner gap >= largeOpeningWidthRatio → opening
+other inner gap → door
+~~~
+
+这不是最终语义真值，所以 Detector 始终输出 Human Review Warning。
+
+### Calibration
+
+Raw Raster 本身没有可靠尺度时，第一版使用 pixelsPerMeter 假设生成 Calibration，并明确输出 Warning。
+
+后续真实 Corpus 如果大量有尺寸标注，应增加独立 Dimension / OCR Detector，而不是把 OCR 塞进墙线扫描器。
+
+### Privacy
+
+CLI 默认不用本地文件名作为 sourceLabel。
+
+未传 --source-id 时：
+
+~~~text
+floorplan-<sha256-prefix>
+~~~
+
+因此 Candidate / Metadata 不会因为用户文件名包含地址或客户姓名而自动带入敏感信息。
+
+### Current Limits
+
+PR #16 仍不是生产级 CV：
+
+- 只适合高对比、近正交户型；
+- 文字、家具、尺寸线仍可能产生 false positive；
+- 墙线断裂可能导致空间泄漏；
+- Opening Symbol 仍是宽度 / 外轮廓启发式；
+- 无 OCR；
+- 无 Room Semantic；
+- 无 PDF Rasterization；
+- 尚未跑真实 10 Case。
+
+是否加入 morphology、Hough、connected-component filter、OCR、VLM 或 learned detector，必须由真实 Pilot Failure Slice 决定。

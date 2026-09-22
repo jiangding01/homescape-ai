@@ -22,12 +22,19 @@
     "floorplan:pilot": "node tools/floorplan-pilot.mjs",
     "floorplan:pilot:check-demo": "node tools/floorplan-pilot.mjs tools/fixtures/floorplan-pilot/experiment.json --min-cases 2 --require-corpus-coverage --require-complete-review --require-complete-metadata",
     "floorplan:geometry": "tsx tools/floorplan-geometry-reconstruct.ts",
-    "floorplan:geometry:check-demo": "tsx tools/floorplan-geometry-smoke.ts"
+    "floorplan:geometry:check-demo": "tsx tools/floorplan-geometry-smoke.ts",
+    "floorplan:raster": "tsx tools/floorplan-raster-extract.ts",
+    "floorplan:raster:check-demo": "tsx packages/floorplan-extractor/src/node/raster-smoke.ts"
   },
   "devDependencies": {
     "prettier": "^3.6.2",
     "turbo": "^2.5.6",
     "typescript": "^5.9.2",
     "tsx": "^4.20.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "sharp"
+    ]
   }
 }

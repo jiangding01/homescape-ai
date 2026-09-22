@@ -87,9 +87,9 @@ TYPESAFE_MODEL=jev-latest
 
 仓库自带的 SVG 仍只用于验证 Benchmark Harness。PR #12 新增 metric-structured-v0.1 结构化数据 Baseline；PR #13 加入 Ground Truth Annotation；PR #14 固定 Pilot Evaluation；PR #15 增加 Geometry Observation Contract 与确定性正交几何重建 Baseline。
 
-PR #15 当前处理的是“Detector Observation → FloorPlanDraft”，并没有声称已经实现 Raw PNG / JPEG CV。
+PR #15 固定“Detector Observation → FloorPlanDraft”的确定性重建；PR #16 已增加第一个 PNG / JPEG Raster Geometry Baseline，把真实像素解码到 Geometry Observation。
 
-真正模型选型仍需真实 Corpus。建议先用 10 张去敏真实户型图做标注 Pilot，稳定后扩充到 30~50 张；素材继续保存在被 Git 忽略的 .floorplan-corpus 中。
+PR #16 仍是 classical deterministic baseline，不代表真实 Corpus 上已经达标。真正模型选型仍需真实 Corpus。建议先用 10 张去敏真实户型图做标注 Pilot，稳定后扩充到 30~50 张；素材继续保存在被 Git 忽略的 .floorplan-corpus 中。
 
 目标闭环：
 
@@ -103,6 +103,7 @@ pnpm floorplan:extract-demo
 pnpm floorplan:corpus:check-demo
 pnpm floorplan:pilot:check-demo
 pnpm floorplan:geometry:check-demo
+pnpm floorplan:raster:check-demo
 ~~~
 
 真实结构化数据：
@@ -119,13 +120,21 @@ pnpm floorplan:geometry -- observation.json candidate.json \
   --metadata candidate.meta.json
 ~~~
 
+PNG / JPEG Raster Baseline：
+
+~~~bash
+pnpm floorplan:raster -- input.png candidate.json \
+  --metadata candidate.meta.json \
+  --source-id case-001
+~~~
+
 真实 Corpus：
 
 ~~~bash
 pnpm floorplan:corpus -- .floorplan-corpus/corpus.json --min-cases 30
 ~~~
 
-说明见 [Floor Plan Extractor Benchmark](docs/FLOORPLAN_EXTRACTOR_BENCHMARK.md)、[Real Floor Plan Corpus](docs/FLOORPLAN_CORPUS.md)、[Ground Truth Annotation](docs/FLOORPLAN_ANNOTATION.md)、[Pilot Evaluation](docs/FLOORPLAN_PILOT.md) 与 [Geometry Baseline](docs/FLOORPLAN_GEOMETRY_BASELINE.md)。
+说明见 [Floor Plan Extractor Benchmark](docs/FLOORPLAN_EXTRACTOR_BENCHMARK.md)、[Real Floor Plan Corpus](docs/FLOORPLAN_CORPUS.md)、[Ground Truth Annotation](docs/FLOORPLAN_ANNOTATION.md)、[Pilot Evaluation](docs/FLOORPLAN_PILOT.md)、[Geometry Baseline](docs/FLOORPLAN_GEOMETRY_BASELINE.md) 与 [Raster Geometry Baseline](docs/FLOORPLAN_RASTER_BASELINE.md)。
 
 ## 资产入库
 
@@ -146,5 +155,6 @@ Production Policy 示例见 tools/fixtures/asset-ingestion/production-policy.exa
 - [Ground Truth 标注](docs/FLOORPLAN_ANNOTATION.md)
 - [Pilot Evaluation](docs/FLOORPLAN_PILOT.md)
 - [Geometry Baseline](docs/FLOORPLAN_GEOMETRY_BASELINE.md)
+- [Raster Geometry Baseline](docs/FLOORPLAN_RASTER_BASELINE.md)
 - [路线图](docs/ROADMAP.md)
 - [ADR](docs/adr/)
