@@ -4,35 +4,41 @@ import { OrthogonalGeometryReconstructor } from '../orthogonal-reconstruction'
 import { RasterGeometryDetector } from '../raster-geometry-detector'
 import { SharpRasterImageDecoder } from './sharp-raster-image-decoder'
 
-const syntheticPlan = `
-<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600">
-  <rect width="800" height="600" fill="white"/>
-  <g fill="black">
-    <rect x="65" y="65" width="235" height="11"/>
-    <rect x="420" y="65" width="316" height="11"/>
-    <rect x="65" y="525" width="435" height="11"/>
-    <rect x="620" y="525" width="116" height="11"/>
+const fixtureWidth = 800
+const fixtureHeight = 600
 
-    <rect x="65" y="295" width="115" height="11"/>
-    <rect x="260" y="295" width="280" height="11"/>
-    <rect x="620" y="295" width="116" height="11"/>
+interface FixtureRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
-    <rect x="65" y="65" width="11" height="471"/>
-    <rect x="725" y="65" width="11" height="471"/>
+const fixtureRects: readonly FixtureRect[] = [
+  { x: 65, y: 65, width: 235, height: 11 },
+  { x: 420, y: 65, width: 316, height: 11 },
+  { x: 65, y: 525, width: 435, height: 11 },
+  { x: 620, y: 525, width: 116, height: 11 },
 
-    <rect x="395" y="65" width="11" height="115"/>
-    <rect x="395" y="260" width="11" height="130"/>
-    <rect x="395" y="470" width="11" height="66"/>
+  { x: 65, y: 295, width: 115, height: 11 },
+  { x: 260, y: 295, width: 280, height: 11 },
+  { x: 620, y: 295, width: 116, height: 11 },
 
-    <rect x="130" y="130" width="16" height="3"/>
-    <rect x="135" y="136" width="16" height="3"/>
-    <rect x="520" y="120" width="21" height="3"/>
-    <rect x="520" y="138" width="21" height="3"/>
-    <rect x="520" y="120" width="3" height="21"/>
-    <rect x="538" y="120" width="3" height="21"/>
-  </g>
-</svg>
-`
+  { x: 65, y: 65, width: 11, height: 471 },
+  { x: 725, y: 65, width: 11, height: 471 },
+
+  { x: 395, y: 65, width: 11, height: 115 },
+  { x: 395, y: 260, width: 11, height: 130 },
+  { x: 395, y: 470, width: 11, height: 66 },
+
+  // Deliberately short decorative / text-like marks.
+  { x: 130, y: 130, width: 16, height: 3 },
+  { x: 135, y: 136, width: 16, height: 3 },
+  { x: 520, y: 120, width: 21, height: 3 },
+  { x: 520, y: 138, width: 21, height: 3 },
+  { x: 520, y: 120, width: 3, height: 21 },
+  { x: 538, y: 120, width: 3, height: 21 },
+]
 
 interface SmokeCase {
   label: string
@@ -40,34 +46,98 @@ interface SmokeCase {
   bytes: Uint8Array
 }
 
-async function buildCases(): Promise<readonly SmokeCase[]> {
-  const source = Buffer.from(syntheticPlan)
-  const transparentSource = Buffer.from(
-    syntheticPlan.replace(
-      '<rect width="800" height="600" fill="white"/>',
-      '',
-    ),
+function buildRawFixture(
+  channels: 3 | 4,
+  transparentBackground: boolean,
+) {
+  const data = Buffer.alloc(
+    fixtureWidth * fixtureHeight * channels,
+    transparentBackground ? 0 : 255,
   )
+
+  for (const rect of fixtureRects) {
+    for (let y = rect.y; y < rect.y + rect.height; y += 1) {
+      for (let x = rect.x; x < rect.x + rect.width; x += 1) {
+        const offset = (y * fixtureWidth + x) * channels
+
+        data[offset] = 0
+        data[offset + 1] = 0
+        data[offset + 2] = 0
+
+        if (channels === 4) {
+          data[offset + 3] = 255
+        }
+      }
+    }
+  }
+
+  return data
+}
+
+async function buildCases(): Promise<readonly SmokeCase[]> {
+  const opaque = buildRawFixture(3, false)
+  const transparent = buildRawFixture(4, true)
 
   return [
     {
       label: 'png',
       mediaType: 'image/png',
-      bytes: await sharp(source).png().toBuffer(),
+      bytes: await sharp(opaque, {
+        raw: {
+          width: fixtureWidth,
+          height: fixtureHeight,
+          channels: 3,
+        },
+      })
+        .png()
+        .toBuffer(),
     },
     {
       label: 'transparent-png',
       mediaType: 'image/png',
-      bytes: await sharp(transparentSource).png().toBuffer(),
+      bytes: await sharp(transparent, {
+        raw: {
+          width: fixtureWidth,
+          height: fixtureHeight,
+          channels: 4,
+        },
+      })
+        .png()
+        .toBuffer(),
     },
     {
       label: 'jpeg',
       mediaType: 'image/jpeg',
-      bytes: await sharp(source)
+      bytes: await sharp(opaque, {
+        raw: {
+          width: fixtureWidth,
+          height: fixtureHeight,
+          channels: 3,
+        },
+      })
         .jpeg({ quality: 90, chromaSubsampling: '4:4:4' })
         .toBuffer(),
     },
   ]
+}
+
+function openingSummary(
+  openings: readonly {
+    orientation: string
+    centerPx: readonly [number, number]
+    widthPx: number
+  }[],
+) {
+  return openings
+    .map(
+      (opening) =>
+        opening.orientation +
+        '@' +
+        opening.centerPx.join(',') +
+        ':' +
+        opening.widthPx,
+    )
+    .join(' | ')
 }
 
 async function main() {
@@ -94,6 +164,19 @@ async function main() {
       bytes: testCase.bytes,
     }
     const detected = await detector.detect(input)
+
+    if (
+      detected.observation.source.widthPx !== fixtureWidth ||
+      detected.observation.source.heightPx !== fixtureHeight
+    ) {
+      throw new Error(
+        testCase.label +
+          ' Raster 尺寸不匹配：' +
+          detected.observation.source.widthPx +
+          'x' +
+          detected.observation.source.heightPx,
+      )
+    }
 
     if (
       detected.observation.source.sourceLabel !==
@@ -128,7 +211,8 @@ async function main() {
         testCase.label +
           ' Opening Observation 数不匹配：' +
           detected.observation.openings.length +
-          ' != 6',
+          ' != 6；实际=' +
+          openingSummary(detected.observation.openings),
       )
     }
 

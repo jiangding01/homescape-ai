@@ -162,11 +162,13 @@ pnpm floorplan:raster -- \
 pnpm floorplan:raster:check-demo
 ~~~
 
-Smoke 在运行时生成同一张 Synthetic Plan 的：
+Smoke 先用显式 Pixel Buffer 生成同一张 Synthetic Plan，再编码为：
 
 - PNG
 - transparent PNG
 - JPEG
+
+这里故意不再通过 SVG → Raster 生成 fixture，避免测试结果受 librsvg / Sharp 版本的 SVG Rasterization 细节影响；Smoke 只验证我们真正关心的 Raster Decode → Detector → Reconstructor 链路。
 
 然后执行完整链路：
 
