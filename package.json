@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@10.17.1",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
@@ -11,7 +13,8 @@
     "asset:ingest": "node tools/asset-ingest.mjs",
     "asset:check-demo": "node tools/asset-ingest.mjs tools/fixtures/asset-ingestion/demo-release.json --check",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "floorplan:benchmark": "node tools/floorplan-benchmark.mjs tools/fixtures/floorplan-benchmark/manifest.json"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

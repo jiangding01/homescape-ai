@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "0.1.0",
+  "dataset": "fixture-smoke-v1",
+  "gridSize": 96,
+  "thresholds": {
+    "roomMatchIou": 0.6,
+    "roomPrecisionMin": 0.9,
+    "roomRecallMin": 0.9,
+    "meanRoomIouMin": 0.9,
+    "roomTypeAccuracyMin": 0.9,
+    "openingCenterToleranceRatio": 0.025,
+    "openingPrecisionMin": 0.85,
+    "openingRecallMin": 0.85,
+    "scaleErrorMax": 0.03,
+    "meanOpeningWidthErrorMax": 0.08,
+    "candidateRoomOverlapRatioMax": 0.03
+  },
+  "cases": [
+    {
+      "id": "plan-a",
+      "sourcePath": "sources/plan-a.svg",
+      "groundTruthPath": "ground-truth/plan-a.json",
+      "candidates": [
+        {
+          "extractorId": "reference-json",
+          "candidatePath": "candidates/reference-json/plan-a.json",
+          "expectedGate": "pass"
+        },
+        {
+          "extractorId": "degraded-json",
+          "candidatePath": "candidates/degraded-json/plan-a.json",
+          "expectedGate": "fail"
+        }
+      ]
+    },
+    {
+      "id": "plan-b",
+      "sourcePath": "sources/plan-b.svg",
+      "groundTruthPath": "ground-truth/plan-b.json",
+      "candidates": [
+        {
+          "extractorId": "reference-json",
+          "candidatePath": "candidates/reference-json/plan-b.json",
+          "expectedGate": "pass"
+        },
+        {
+          "extractorId": "degraded-json",
+          "candidatePath": "candidates/degraded-json/plan-b.json",
+          "expectedGate": "fail"
+        }
+      ]
+    }
+  ]
+}

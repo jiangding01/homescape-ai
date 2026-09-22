@@ -1,0 +1,209 @@
+{
+  "schemaVersion": "0.1.0",
+  "source": {
+    "kind": "floorplan_image",
+    "widthPx": 1080,
+    "heightPx": 840,
+    "sourceLabel": "benchmark-plan-a"
+  },
+  "calibration": {
+    "startPx": [
+      80,
+      760
+    ],
+    "endPx": [
+      680,
+      760
+    ],
+    "realDistanceMeters": 6
+  },
+  "assumptions": {
+    "wallThicknessMeters": 0.12,
+    "ceilingHeightMeters": 2.8,
+    "wallThicknessConfirmed": true,
+    "ceilingHeightConfirmed": true
+  },
+  "rooms": [
+    {
+      "id": "gt-a-living",
+      "name": "客餐厅",
+      "type": "living",
+      "boundaryPx": [
+        [
+          80,
+          420
+        ],
+        [
+          420,
+          420
+        ],
+        [
+          680,
+          420
+        ],
+        [
+          680,
+          760
+        ],
+        [
+          80,
+          760
+        ]
+      ],
+      "confidence": 1
+    },
+    {
+      "id": "gt-a-bedroom",
+      "name": "卧室",
+      "type": "bedroom",
+      "boundaryPx": [
+        [
+          680,
+          420
+        ],
+        [
+          1000,
+          420
+        ],
+        [
+          1000,
+          760
+        ],
+        [
+          680,
+          760
+        ]
+      ],
+      "confidence": 1
+    },
+    {
+      "id": "gt-a-kitchen",
+      "name": "厨房",
+      "type": "kitchen",
+      "boundaryPx": [
+        [
+          80,
+          120
+        ],
+        [
+          420,
+          120
+        ],
+        [
+          420,
+          420
+        ],
+        [
+          80,
+          420
+        ]
+      ],
+      "confidence": 1
+    },
+    {
+      "id": "gt-a-hall",
+      "name": "走廊",
+      "type": "hallway",
+      "boundaryPx": [
+        [
+          420,
+          120
+        ],
+        [
+          680,
+          120
+        ],
+        [
+          680,
+          420
+        ],
+        [
+          420,
+          420
+        ]
+      ],
+      "confidence": 1
+    },
+    {
+      "id": "gt-a-bedroom2",
+      "name": "次卧",
+      "type": "bedroom",
+      "boundaryPx": [
+        [
+          680,
+          120
+        ],
+        [
+          1000,
+          120
+        ],
+        [
+          1000,
+          420
+        ],
+        [
+          680,
+          420
+        ]
+      ],
+      "confidence": 1
+    }
+  ],
+  "openings": [
+    {
+      "id": "gt-a-opening-living-hall",
+      "roomId": "gt-a-living",
+      "edgeIndex": 1,
+      "kind": "opening",
+      "offsetPx": 50,
+      "widthPx": 120,
+      "heightMeters": 2.4,
+      "sillHeightMeters": 0,
+      "confidence": 1
+    },
+    {
+      "id": "gt-a-door-kitchen-hall",
+      "roomId": "gt-a-kitchen",
+      "edgeIndex": 1,
+      "kind": "door",
+      "offsetPx": 175,
+      "widthPx": 90,
+      "heightMeters": 2.1,
+      "swing": "sliding",
+      "confidence": 1
+    },
+    {
+      "id": "gt-a-door-bedroom2-hall",
+      "roomId": "gt-a-bedroom2",
+      "edgeIndex": 3,
+      "kind": "door",
+      "offsetPx": 105,
+      "widthPx": 90,
+      "heightMeters": 2.1,
+      "swing": "right",
+      "confidence": 1
+    },
+    {
+      "id": "gt-a-window-living",
+      "roomId": "gt-a-living",
+      "edgeIndex": 3,
+      "kind": "window",
+      "offsetPx": 150,
+      "widthPx": 240,
+      "heightMeters": 1.8,
+      "sillHeightMeters": 0.7,
+      "confidence": 1
+    },
+    {
+      "id": "gt-a-window-bedroom",
+      "roomId": "gt-a-bedroom",
+      "edgeIndex": 2,
+      "kind": "window",
+      "offsetPx": 55,
+      "widthPx": 210,
+      "heightMeters": 1.8,
+      "sillHeightMeters": 0.7,
+      "confidence": 1
+    }
+  ]
+}
