@@ -27,7 +27,6 @@ function usage() {
   return [
     '用法：',
     '  node tools/floorplan-raster-batch.mjs <corpus.json>',
-    '    [--extractor-id <id>]',
     '    [--pixels-per-meter <number>]',
     '    [--min-cases <number>]',
     '    [--corpus-report <report.json>]',
@@ -53,7 +52,7 @@ function parseArgs(argv) {
     throw new Error(usage())
   }
 
-  let extractorId = DEFAULT_EXTRACTOR_ID
+  const extractorId = DEFAULT_EXTRACTOR_ID
   let pixelsPerMeter = 100
   let minCases = 10
   let corpusReportPath
@@ -62,13 +61,6 @@ function parseArgs(argv) {
 
   while (args.length > 0) {
     const arg = args.shift()
-
-    if (arg === '--extractor-id') {
-      const value = args.shift()
-      if (!value) throw new Error('--extractor-id 缺少值')
-      extractorId = safeSegment(value, 'extractor-id')
-      continue
-    }
 
     if (arg === '--pixels-per-meter') {
       const value = Number(args.shift())
@@ -113,8 +105,6 @@ function parseArgs(argv) {
 
     throw new Error('未知参数：' + arg + '\n' + usage())
   }
-
-  safeSegment(extractorId, 'extractor-id')
 
   return {
     help: false,
@@ -324,9 +314,10 @@ async function main() {
 
   if (
     corpusSummary.dataset !== manifest.dataset ||
-    typeof corpusSummary.datasetFingerprint !== 'string'
+    typeof corpusSummary.datasetFingerprint !== 'string' ||
+    !/^[a-f0-9]{64}$/i.test(corpusSummary.datasetFingerprint)
   ) {
-    throw new Error('Corpus Summary 与 Manifest 不一致')
+    throw new Error('Corpus Summary 与 Manifest / Fingerprint 不一致')
   }
 
   const candidateRoot = resolve(
