@@ -362,7 +362,6 @@ async function main() {
 
     outputs.push({
       caseId: corpusCase.id,
-      sourcePath: relative(root, sourcePath),
       candidatePath: relative(root, candidatePath),
       extractionMetadataPath: relative(root, metadataPath),
     })
