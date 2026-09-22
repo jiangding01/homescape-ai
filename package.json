@@ -24,6 +24,7 @@
     "floorplan:geometry": "tsx tools/floorplan-geometry-reconstruct.ts",
     "floorplan:geometry:check-demo": "tsx tools/floorplan-geometry-smoke.ts",
     "floorplan:raster": "tsx tools/floorplan-raster-extract.ts",
+    "floorplan:raster:batch": "node tools/floorplan-raster-batch.mjs",
     "floorplan:raster:check-demo": "tsx packages/floorplan-extractor/src/node/raster-smoke.ts"
   },
   "devDependencies": {
