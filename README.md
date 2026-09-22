@@ -85,9 +85,9 @@ TYPESAFE_MODEL=jev-latest
 
 户型识别现在有独立 FloorPlanExtractor Contract 与离线 Benchmark Gate，可以用统一指标比较公司结构化数据、CV、VLM 或 Hybrid 输出，而不把业务绑定到某个 Provider。
 
-仓库自带的 SVG 仍只用于验证 Benchmark Harness。PR #12 新增 metric-structured-v0.1 作为第一个可运行的结构化数据 Baseline Adapter，并增加真实 Corpus Intake Contract；它不是对公司原始户型 Schema 的猜测。
+仓库自带的 SVG 仍只用于验证 Benchmark Harness。PR #12 新增 metric-structured-v0.1 结构化数据 Baseline；PR #13 进一步加入原图 Overlay、Room Polygon / Calibration / Opening 校正、Ground Truth 导出与 Review Burden 记录。
 
-真正模型选型仍需先建立 30~50 张真实户型图 / PDF Corpus。真实素材建议保存在被 Git 忽略的 .floorplan-corpus 中。
+真正模型选型仍需真实 Corpus。建议先用 10 张去敏真实户型图做标注 Pilot，稳定后扩充到 30~50 张；素材继续保存在被 Git 忽略的 .floorplan-corpus 中。
 
 目标闭环：
 
@@ -114,7 +114,7 @@ pnpm floorplan:extract -- input.json output.json \
 pnpm floorplan:corpus -- .floorplan-corpus/corpus.json --min-cases 30
 ~~~
 
-说明见 [Floor Plan Extractor Benchmark](docs/FLOORPLAN_EXTRACTOR_BENCHMARK.md) 与 [Real Floor Plan Corpus](docs/FLOORPLAN_CORPUS.md)。
+说明见 [Floor Plan Extractor Benchmark](docs/FLOORPLAN_EXTRACTOR_BENCHMARK.md)、[Real Floor Plan Corpus](docs/FLOORPLAN_CORPUS.md) 与 [Ground Truth Annotation](docs/FLOORPLAN_ANNOTATION.md)。
 
 ## 资产入库
 
@@ -132,5 +132,6 @@ Production Policy 示例见 tools/fixtures/asset-ingestion/production-policy.exa
 - [资产流水线](docs/ASSET_PIPELINE.md)
 - [户型 Extractor Benchmark](docs/FLOORPLAN_EXTRACTOR_BENCHMARK.md)
 - [真实户型 Corpus](docs/FLOORPLAN_CORPUS.md)
+- [Ground Truth 标注](docs/FLOORPLAN_ANNOTATION.md)
 - [路线图](docs/ROADMAP.md)
 - [ADR](docs/adr/)

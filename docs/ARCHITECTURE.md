@@ -1,4 +1,4 @@
-# HomeScape AI Architecture v0.12
+# HomeScape AI Architecture v0.13
 
 ## 1. 当前端到端闭环
 
@@ -280,3 +280,86 @@ PR #13 应围绕真实 Corpus 展开，而不是继续增加 Synthetic Demo。
 核心原则保持不变：
 
 > Extractor 只产生 Candidate，HomeSpatialModel 最终真值仍然由 Importer + Human Review + Validation 确认。
+
+
+## 13. Ground Truth Annotation / Review Burden
+
+PR #13 把真实 Corpus 最关键的人工作业补进 Web Workbench：
+
+~~~text
+Source Image
+   +
+Extractor / Imported FloorPlanDraft
+        ↓
+Overlay Annotation
+        ├── Room Polygon Vertex
+        ├── Calibration
+        ├── Room Name / Type
+        ├── Opening Kind / Offset / Width
+        └── Wall / Ceiling Assumptions
+        ↓
+Ground Truth Gate
+        ↓
+FloorPlanDraft Ground Truth
+        +
+Review Burden Sidecar
+~~~
+
+### 坐标真值
+
+Annotation Canvas 的 viewBox 直接使用 FloorPlanDraft source.widthPx / heightPx。
+
+Source 图片只有在宽高比与 Draft 兼容时才进入 Overlay。不同分辨率但相同比例可以按 Draft Pixel Space 缩放；宽高比不一致时暂停 Overlay，避免用户在错误坐标系下修正。
+
+### Ground Truth Gate
+
+导出前至少阻断：
+
+- 非法 FloorPlanDraft
+- Source / Calibration 非法
+- 未确认墙厚 / 层高
+- Room 缺少 type
+- Polygon 越界 / 面积过小 / 自相交
+- Entity ID 重复
+- Opening Room / Edge 引用错误
+- Opening offset / width 越界
+- Opening 垂直尺寸超过 ceiling
+- 已加载 Source 与 Draft 宽高比不一致
+
+导出的 Ground Truth 会把 Room / Opening confidence 统一标记为 1，表示“已经完成人工确认”，但不会绕过 Importer / Spatial Validation。
+
+### Review Burden
+
+Sidecar Contract 记录：
+
+~~~text
+startedAt / completedAt / durationMs
+totalEdits
+roomVertexMoves
+roomMetadataEdits
+openingGeometryEdits
+calibrationEdits
+assumptionEdits
+resets
+touchedRoomIds
+source image dimensions
+~~~
+
+后续 Extractor 选型不能只比较 IoU / Recall，也要比较：
+
+~~~text
+结构质量
++ Human Review Time
++ Human Edit Count
++ Failure Taxonomy
++ Latency
++ Cost
+~~~
+
+这更接近真实生产效率。
+
+### 当前边界
+
+PR #13 只支持图片 Overlay；PDF 仍需要 Rasterization / Page Selection。
+
+当前可以拖动已有 Room Polygon 顶点，但尚未提供增删顶点和 Opening Edge 重新绑定。这些应该在真实 Corpus Pilot 暴露真实需求后再补，不提前堆编辑器复杂度。

@@ -1,4 +1,5 @@
 export * from './corpus'
 export * from './registry'
+export * from './review-burden'
 export * from './structured-data'
 export * from './types'

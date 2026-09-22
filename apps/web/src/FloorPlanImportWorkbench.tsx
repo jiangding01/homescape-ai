@@ -1,3 +1,4 @@
+import { FloorPlanAnnotationWorkbench } from './FloorPlanAnnotationWorkbench'
 import {
   FloorPlanDraftImporter,
   applySpatialCorrection,
@@ -65,11 +66,15 @@ export function FloorPlanImportWorkbench({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const importSequenceRef = useRef(0)
+  const [annotationResetKey, setAnnotationResetKey] = useState(0)
   const [roomTypeDrafts, setRoomTypeDrafts] = useState<
     Record<string, RoomType>
   >({})
 
-  const importDraft = async (nextDraft: FloorPlanDraft) => {
+  const importDraft = async (
+    nextDraft: FloorPlanDraft,
+    resetAnnotation = false,
+  ) => {
     setLoading(true)
     setError(null)
     importSequenceRef.current += 1
@@ -87,6 +92,9 @@ export function FloorPlanImportWorkbench({
 
       setDraft(nextDraft)
       setSession(createSpatialReviewSession(result))
+      if (resetAnnotation) {
+        setAnnotationResetKey((current) => current + 1)
+      }
       setRoomTypeDrafts({})
     } catch (importError) {
       setSession(null)
@@ -101,7 +109,7 @@ export function FloorPlanImportWorkbench({
   }
 
   const loadSample = () => {
-    void importDraft(sampleFloorPlanDraft)
+    void importDraft(sampleFloorPlanDraft, true)
   }
 
   const uploadDraft = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -126,7 +134,7 @@ export function FloorPlanImportWorkbench({
         )
       }
 
-      await importDraft(parsed)
+      await importDraft(parsed, true)
     } catch (uploadError) {
       setError(
         uploadError instanceof Error
@@ -238,12 +246,13 @@ export function FloorPlanImportWorkbench({
     <section className="floorplan-import-section">
       <div className="floorplan-import-copy">
         <div className="eyebrow">
-          PR #8 · REAL ROOM INTEGRATION
+          PR #13 · GROUND TRUTH ANNOTATION
         </div>
-        <h2>先把真实户型变成“可核验的候选模型”。</h2>
+        <h2>把真实户型原图和结构化 Draft 放到同一张校正画布。</h2>
         <p>
-          当前链路不假装已经实现全自动识图。上游解析器或标注工具输出像素坐标 Draft，
-          HomeScape 根据标尺换算真实尺寸、重建共享墙和空间连接，再把低置信度与假设项交给人工确认。
+          现在可以叠加真实户型图片，直接拖动 Room Polygon 顶点与标尺端点，并校正房间类型、Opening
+          和尺寸假设。校正结果仍要经过 Importer / Review / Validation，且可以导出 Ground Truth
+          与 Review Burden 记录。
         </p>
 
         <div className="floorplan-import-actions">
@@ -274,6 +283,16 @@ export function FloorPlanImportWorkbench({
       </div>
 
       <div className="floorplan-import-workbench">
+        <FloorPlanAnnotationWorkbench
+          draft={draft}
+          resetKey={annotationResetKey}
+          disabled={disabled || loading}
+          onApply={(nextDraft) => importDraft(nextDraft, false)}
+        />
+
+        <div className="floorplan-review-divider">
+          <span>Candidate Import / Human Review</span>
+        </div>
         {!session ? (
           <div className="floorplan-empty">
             <strong>尚未生成 Candidate</strong>

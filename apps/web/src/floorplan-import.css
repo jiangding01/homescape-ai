@@ -235,3 +235,349 @@
     flex-direction: column;
   }
 }
+
+
+.floorplan-annotation {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #c8c2b6;
+}
+
+.floorplan-annotation-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.floorplan-annotation-head > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.floorplan-annotation-head strong {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.floorplan-annotation-head span {
+  color: #737468;
+  font-size: 11px;
+}
+
+.floorplan-annotation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.floorplan-annotation-actions button,
+.floorplan-annotation-footer button {
+  min-height: 34px;
+  border: 1px solid #bdb6aa;
+  padding: 7px 10px;
+  background: #f6f2ea;
+  color: #34362e;
+  cursor: pointer;
+}
+
+.floorplan-annotation-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 0.34fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.floorplan-annotation-canvas-shell {
+  min-width: 0;
+  border: 1px solid #c9c3b8;
+  background: #f6f3ed;
+}
+
+.floorplan-overlay-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border-bottom: 1px solid #d4cec3;
+  color: #737468;
+  font-size: 10px;
+}
+
+.floorplan-overlay-toolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+}
+
+.floorplan-overlay-toolbar input[type='range'] {
+  width: 86px;
+}
+
+.floorplan-annotation-canvas {
+  display: block;
+  width: 100%;
+  max-height: 560px;
+  background:
+    linear-gradient(rgba(76, 77, 68, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(76, 77, 68, 0.04) 1px, transparent 1px),
+    #fbf9f4;
+  background-size: 32px 32px;
+  touch-action: none;
+  user-select: none;
+}
+
+.floorplan-annotation-room {
+  fill: rgba(208, 205, 193, 0.18);
+  stroke: rgba(72, 76, 66, 0.54);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+
+.floorplan-annotation-room.selected {
+  fill: rgba(159, 167, 143, 0.18);
+  stroke: #59624f;
+  stroke-width: 3;
+}
+
+.floorplan-annotation-label {
+  fill: #34382f;
+  font-size: 20px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: rgba(250, 248, 242, 0.9);
+  stroke-width: 5px;
+  stroke-linejoin: round;
+}
+
+.floorplan-vertex {
+  fill: #f6f2ea;
+  stroke: #777a6d;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
+}
+
+.floorplan-vertex.selected {
+  fill: #3f4939;
+  stroke: #fbf8f1;
+}
+
+.floorplan-vertex:active,
+.floorplan-calibration-handle:active {
+  cursor: grabbing;
+}
+
+.floorplan-annotation-opening {
+  stroke-width: 10;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.floorplan-annotation-opening.opening-door {
+  stroke: #9a5b42;
+}
+
+.floorplan-annotation-opening.opening-window {
+  stroke: #4d7d9a;
+}
+
+.floorplan-annotation-opening.opening-opening {
+  stroke: #897d53;
+}
+
+.floorplan-calibration-line {
+  stroke: #a03d32;
+  stroke-width: 3;
+  stroke-dasharray: 9 6;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.floorplan-calibration-handle {
+  fill: #fff8ed;
+  stroke: #a03d32;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
+}
+
+.floorplan-annotation-warning {
+  padding: 8px 10px;
+  border-top: 1px solid #d8c6ba;
+  background: #f7eee7;
+  color: #8c5545;
+  font-size: 11px;
+}
+
+.floorplan-annotation-panel {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  max-height: 620px;
+  overflow: auto;
+  padding: 11px;
+  border: 1px solid #c9c3b8;
+  background: rgba(250, 248, 242, 0.74);
+}
+
+.floorplan-annotation-panel > label,
+.floorplan-annotation-group > label,
+.floorplan-opening-row label {
+  display: grid;
+  gap: 5px;
+  color: #6e7065;
+  font-size: 10px;
+}
+
+.floorplan-annotation-panel input,
+.floorplan-annotation-panel select {
+  min-width: 0;
+  border: 1px solid #c1bbaf;
+  padding: 7px 8px;
+  background: #fffdf8;
+  color: #30332c;
+  font: inherit;
+}
+
+.floorplan-annotation-group {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid #d8d2c7;
+}
+
+.floorplan-annotation-group > strong,
+.floorplan-opening-editor > strong {
+  color: #31342d;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.floorplan-check {
+  display: flex !important;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 7px !important;
+}
+
+.floorplan-check input {
+  margin: 0;
+}
+
+.floorplan-opening-editor {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid #d8d2c7;
+}
+
+.floorplan-opening-editor > span {
+  color: #818277;
+  font-size: 10px;
+}
+
+.floorplan-opening-row {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid #d5cfc4;
+  background: rgba(244, 241, 233, 0.72);
+}
+
+.floorplan-opening-row code {
+  overflow: hidden;
+  color: #77776b;
+  font-size: 9px;
+  text-overflow: ellipsis;
+}
+
+.floorplan-annotation-gate {
+  display: grid;
+  gap: 5px;
+  padding: 9px;
+  border: 1px solid #d1bfb2;
+  background: #f7eee7;
+  color: #835442;
+  font-size: 10px;
+}
+
+.floorplan-annotation-gate.gate-ready {
+  border-color: #b6c2ae;
+  background: #eff3eb;
+  color: #53644c;
+}
+
+.floorplan-annotation-footer {
+  display: grid;
+  gap: 6px;
+}
+
+.floorplan-annotation-footer button:first-child {
+  background: #32372e;
+  color: #f8f5ee;
+  border-color: #32372e;
+}
+
+.floorplan-annotation-actions button:disabled,
+.floorplan-annotation-footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.floorplan-review-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 12px;
+  color: #77786d;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.floorplan-review-divider::before,
+.floorplan-review-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #c8c2b6;
+}
+
+@media (max-width: 1100px) {
+  .floorplan-annotation-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .floorplan-annotation-panel {
+    max-height: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .floorplan-annotation-head {
+    flex-direction: column;
+  }
+
+  .floorplan-annotation-actions {
+    justify-content: flex-start;
+  }
+
+  .floorplan-overlay-toolbar label {
+    width: 100%;
+    margin-left: 0;
+  }
+}
