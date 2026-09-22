@@ -507,8 +507,8 @@ export function App() {
         <div className="eyebrow">HOMESCAPE AI · REAL ROOM PIPELINE</div>
         <h1>从真实户型开始，再用一句话持续修改这个家。</h1>
         <p>
-          PR #9 把 CatalogAsset 的标准化 glTF / GLB 资产接入 RenderSnapshot 与 Babylon Runtime。
-          Planner 仍只使用真实尺寸和约束；Renderer 根据 assetId 加载视觉资产，失败时安全降级为尺寸代理。
+          当前链路已经覆盖 Ground Truth 标注、空间导入、Catalog / Planner、自然语言设计和 Babylon Runtime。
+          AI 负责提出结构化意图，空间真值、几何约束、Revision 与可执行状态仍由确定性系统控制。
         </p>
         <div className="status-row">
           <span className={health?.ok ? 'dot dot-online' : 'dot'} />
@@ -831,7 +831,7 @@ export function App() {
         </article>
       </section>
 
-      <footer>PR #9 · Real Asset Pipeline · 下一步：Production SKU Asset Ingestion / LOD / KTX2 / Meshopt</footer>
+      <footer>PR #13 · Ground Truth Annotation · 下一步：Real Corpus Pilot + Geometry Baseline</footer>
     </main>
   )
 }

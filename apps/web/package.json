@@ -11,6 +11,7 @@
   "dependencies": {
     "@homescape/catalog": "workspace:*",
     "@homescape/domain": "workspace:*",
+    "@homescape/floorplan-extractor": "workspace:*",
     "@homescape/planner": "workspace:*",
     "@homescape/renderer-babylon": "workspace:*",
     "@homescape/renderer-contract": "workspace:*",

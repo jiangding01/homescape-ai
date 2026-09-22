@@ -82,7 +82,7 @@
 - [x] Finalize Gate
 - [x] Draft JSON 导入与 2D Review Workbench
 - [ ] CV / VLM / 公司户型数据 Extractor
-- [ ] 户型原图 overlay + 几何交互校正
+- [x] 户型原图 overlay + 几何交互校正（PR #13）
 
 ## PR #8 — Real Room Integration
 
@@ -160,7 +160,7 @@
 - [ ] 公司原始户型数据 Schema Mapper
 - [ ] CV Extractor 实际跑数
 - [ ] VLM Extractor 实际跑数
-- [ ] Human Review 修正量 / 修正耗时指标
+- [x] Human Review 修正量 / 修正耗时 Contract（PR #13）
 
 ## PR #12 — Real Corpus Intake + Structured Extractor Baseline
 
@@ -182,7 +182,28 @@
 - [ ] 公司原始户型数据 Schema Mapper
 - [ ] CV Geometry Adapter
 - [ ] VLM Structured Extraction Adapter
-- [ ] Human Review Burden 数据采集
+- [x] Human Review Burden 数据采集（PR #13）
+
+## PR #13 — Ground Truth Annotation Workbench
+
+- [x] 原图 Overlay（PNG / JPEG / WebP / SVG）
+- [x] Draft / Source Aspect Ratio Gate
+- [x] Room Polygon 顶点拖拽
+- [x] Calibration 端点拖拽
+- [x] Room Name / Type 校正
+- [x] Opening Kind / Offset / Width 校正
+- [x] Wall Thickness / Ceiling Height 人工确认
+- [x] Ground Truth 结构门禁
+- [x] Polygon Self-intersection Gate
+- [x] Opening Edge / Ceiling Gate
+- [x] Ground Truth JSON 导出
+- [x] Review Burden Sidecar 导出
+- [x] Review Edit Counts / Touched Room IDs / Duration
+- [x] Demo Source Overlay
+- [ ] PDF 原图 Overlay / Rasterization
+- [ ] Opening Edge 交互式重绑定
+- [ ] Room Polygon 增删顶点
+- [ ] 真实 30~50 Case Corpus
 
 ## P1 — Real Room Vertical Slice
 
@@ -206,17 +227,18 @@
 
 ## 下一阶段候选
 
-### PR #13 — Real Corpus Collection + Geometry Baseline
+### PR #14 — Real Corpus Pilot + Geometry Baseline
 
-PR #12 已经建立真实 Corpus Intake Contract 和第一个可运行的结构化数据 Baseline Adapter。
+PR #13 已补齐人工 Ground Truth 标注 / 校正入口和 Review Burden 记录。
 
-下一阶段需要真实输入数据才能继续做有意义的模型选型：
+下一阶段应开始真实数据 Pilot，而不是继续扩充 Synthetic Fixture：
 
-1. 收集 30~50 张真实户型图 / PDF
-2. 人工完成 FloorPlanDraft Ground Truth
-3. 若公司存在原始结构化户型数据，补一层 Company Schema Mapper
-4. 接入第一个 CV / Geometry Baseline
-5. 与 metric-structured baseline / 后续 VLM 在同一 Benchmark 上比较
+1. 先准备 10 张去敏真实户型图，验证标注流程与字段定义
+2. 稳定后扩充到 30~50 张
+3. 导出 Ground Truth + Review Burden
+4. 若公司存在原始结构化户型数据，补 Company Raw Schema Mapper
+5. 接入第一个 CV / Geometry Baseline
+6. 再接 VLM / Hybrid 做同 Corpus 对比
 
 
 ### Technical Spikes
