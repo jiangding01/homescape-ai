@@ -121,6 +121,55 @@ function validateCase(c, i) {
   if (c.geometryStage === 'floorplan_roi' && !record(c.roi)) fail(id + ' ROI 处理未记录几何变换')
   return c
 }
+
+function classifyExtractorError(output) {
+  const message = String(output)
+  if (message.includes('未检测到完整正交外轮廓')) return 'no_orthogonal_outline'
+  if (message.includes('Calibration') || message.includes('calibration')) return 'calibration_failure'
+  if (message.includes('unsupported image format') || message.includes('Input buffer') || message.includes('Sharp')) return 'decode_failure'
+  if (message.includes('Reconstruction') || message.includes('Reconstructor') || message.includes('重建')) return 'reconstruction_failure'
+  return 'extractor_failed'
+}
+async function verifyArtifacts(source, candidatePath, metadataPath) {
+  let candidateBytes, metadataBytes
+  try {
+    candidateBytes = await readFile(candidatePath)
+    metadataBytes = await readFile(metadataPath)
+  } catch {
+    fail('Extractor 成功后缺少 Candidate / Metadata 产物')
+  }
+  let draft, recordValue
+  try {
+    draft = JSON.parse(candidateBytes.toString('utf8'))
+    recordValue = JSON.parse(metadataBytes.toString('utf8'))
+  } catch {
+    fail('Candidate / Metadata 不是有效 JSON')
+  }
+  if (!record(draft) || draft.schemaVersion !== '0.1.0' ||
+      !record(draft.source) || draft.source.kind !== 'floorplan_image' ||
+      draft.source.sourceLabel !== source.id ||
+      draft.source.widthPx !== source.widthPx || draft.source.heightPx !== source.heightPx ||
+      !Array.isArray(draft.rooms) || !Array.isArray(draft.openings)) {
+    fail('Candidate 结构或源图片尺寸与 Intake 不一致')
+  }
+  if (!record(recordValue) || recordValue.schemaVersion !== '0.1.0' ||
+      recordValue.sourceId !== source.id || !record(recordValue.metadata) ||
+      recordValue.metadata.extractorId !== EXTRACTOR_ID ||
+      (recordValue.warnings !== undefined && (!Array.isArray(recordValue.warnings) ||
+        !recordValue.warnings.every((item) => typeof item === 'string')))) {
+    fail('Metadata 结构、Source ID 或 Extractor ID 不匹配')
+  }
+  return {
+    candidateSha256: sha256(candidateBytes),
+    metadataSha256: sha256(metadataBytes),
+    candidatePath: relative(dirname(dirname(source.filePath)), candidatePath).split(sep).join('/'),
+    metadataPath: relative(dirname(dirname(source.filePath)), metadataPath).split(sep).join('/'),
+    roomCount: draft.rooms.length,
+    openingCount: draft.openings.length,
+    warningCount: recordValue.warnings?.length ?? 0,
+    extractorLatencyMs: recordValue.metadata.latencyMs ?? null,
+  }
+}
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   const root = dirname(args.manifest)
@@ -183,9 +232,22 @@ async function main() {
       const metadata = resolve(root, 'metadata', EXTRACTOR_ID, source.id + '.json')
       const started = Date.now()
       const result = spawnSync(pnpm, ['exec', 'tsx', 'tools/floorplan-raster-extract.ts', source.filePath, candidate, '--metadata', metadata, '--source-id', source.id, '--pixels-per-meter', String(args.pixelsPerMeter)], { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 2 * 1024 * 1024 })
-      source.candidateStatus = result.status === 0 && !result.error ? 'generated_unverified' : 'failed'
       source.elapsedMs = Date.now() - started
-      if (source.candidateStatus === 'failed') source.error = String(result.error?.message ?? result.stderr ?? 'Extractor exit=' + result.status).slice(-700)
+      if (result.status !== 0 || result.error) {
+        source.candidateStatus = 'failed'
+        source.failureCode = result.error?.code === 'ENOENT'
+          ? 'extractor_command_missing'
+          : classifyExtractorError(result.stderr ?? result.error?.message)
+      } else {
+        try {
+          Object.assign(source, await verifyArtifacts(source, candidate, metadata))
+          // Only structural integrity was checked; Human Review is still mandatory.
+          source.candidateStatus = 'generated_unverified'
+        } catch {
+          source.candidateStatus = 'failed'
+          source.failureCode = 'invalid_candidate_artifact'
+        }
+      }
     }
   }
   const sanitized = sources.map(({filePath, ...item}) => item)
@@ -197,6 +259,10 @@ async function main() {
     caseCount: sanitized.length,
     extractedCount: sanitized.filter((s) => s.candidateStatus === 'generated_unverified').length,
     failedCount: sanitized.filter((s) => s.candidateStatus === 'failed').length,
+    failureCounts: Object.fromEntries(
+      [...new Set(sanitized.filter((s) => s.failureCode).map((s) => s.failureCode))]
+        .sort().map((code) => [code, sanitized.filter((s) => s.failureCode === code).length]),
+    ),
     groundTruthCaseCount: 0,
     benchmarkReady: false,
     isOfficialCorpusFingerprint: false,

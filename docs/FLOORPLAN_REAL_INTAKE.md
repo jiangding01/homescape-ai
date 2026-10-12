@@ -75,3 +75,27 @@ Smoke 使用极小 Synthetic PNG，不包含任何真实用户图片，不增加
 
 当前未完成：真实 Raster 产物复核、房间几何及开口标注、尺寸标定、室内/室外区域规则、Corpus Gate、Benchmark、人工 Review、Failure Slice 决策。图像不提交 Git，CI 只能验证通用工具和 Synthetic Smoke。
 
+
+## 提取诊断报告（Ground Truth 之前）
+
+`--extract` 成功退出后，Intake 会验证 Candidate 与 Metadata 的 JSON 结构、
+`sourceLabel` / `sourceId`、原图像素尺寸和 extractorId，并记录：
+`candidateSha256`、`metadataSha256`、相对路径、`roomCount`、
+`openingCount`、`warningCount`、`extractorLatencyMs`。
+成功仅记为 `generated_unverified`，仍不代表模型识别准确。
+
+失败仅保留结构化 `failureCode`（例如 `no_orthogonal_outline`、
+`decode_failure`、`reconstruction_failure`、`invalid_candidate_artifact`、
+`extractor_command_missing`），以及聚合 `failureCounts`，避免报告复制命令行堆栈、
+本地绝对路径或用户文件名。这是**预标注阶段的运行失败分类**，与官方
+Benchmark 的 Room IoU、Opening Recall 等指标不同。
+
+本地独立墙线扫描对 20 张真实图片做过探索性检查：在默认
+`darkThreshold=96`、`minWallRunRatio=0.08` 下，
+Pilot A 有 2/10、Pilot B 有 8/10 满足“至少两个水平与垂直墙线位置”的 Detector
+前置条件。该扫描由独立脚本复现墙线逻辑，不等于官方 Extractor 的实际运行结果，
+也不代表任何准确率；真实图片仍需用 `--extract` 跑正式代码，再经人工 Ground Truth
+与 Benchmark 验证。
+
+真实案例失败时不得为了凑出 `benchmarkReady=true` 而直接修改阈值、
+推测真实尺寸或将 Candidate 充当 Ground Truth。

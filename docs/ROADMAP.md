@@ -320,6 +320,9 @@ PR #16 已把 PNG / JPEG 像素接入 Geometry Observation，并通过 Synthetic
 - [x] A/B 两组各 10 张真实候选图完成离线预选（素材不入 Git；非 Ground Truth）
 - [x] 真实素材 Intake Preflight / Source Set Fingerprint / Candidate 预提取 CLI
 - [x] 文件头、尺寸、SHA-256、路径越界与未标注状态 Smoke
+- [x] Intake 提取产物哈希、Case 一致性与 Room / Opening / Warning 计数
+- [x] Intake 失败类型聚合与假 Extractor 成功/失败回归 Smoke
+- [x] 20 张真实图片默认墙线扫描的独立诊断（非正式 Benchmark）
 - [ ] 准备第一批 10 张去敏真实户型图
 - [ ] 用 PR #13 Workbench 完成 Ground Truth
 - [ ] 跑 PR #12 Corpus Check 生成真实 datasetFingerprint
