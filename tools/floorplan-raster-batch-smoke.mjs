@@ -255,7 +255,13 @@ try {
     !invalidResult.stderr.includes('文件扩展名不是 .png') ||
     (await exists(join(root, 'candidates')))
   ) {
-    fail('后续 Case 无效时不得执行前面 Case 的 Extractor')
+    fail(
+      '后续 Case 无效时不得执行前面 Case 的 Extractor' +
+        ' · status=' + invalidResult.status +
+        ' · error=' + invalidResult.error +
+        ' · stderr=' + invalidResult.stderr +
+        ' · candidateRootExists=' + (await exists(join(root, 'candidates'))),
+    )
   }
 
   process.stderr.write(
