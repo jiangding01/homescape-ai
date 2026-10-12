@@ -42,7 +42,7 @@ try {
   assert.deepEqual(parsed.failureCounts, { no_orthogonal_outline: 1 })
   assert.equal(parsed.cases[0].candidateStatus, 'failed')
   assert.ok(!('roomIou' in parsed.cases[0]))
-  assert.ok(!('sourcePath' in result.stdout))
+  assert.ok(!result.stdout.includes('sourcePath'))
   result = run(intakeA)
   assert.notEqual(result.status, 0)
   assert.match(result.stderr, /缺少 Intake 证据/)
