@@ -704,3 +704,14 @@
   .floorplan-annotation.is-focused .floorplan-annotation-layout { grid-template-columns: minmax(0, 1fr); }
   .floorplan-annotation.is-focused .floorplan-annotation-panel { display: none; }
 }
+
+/* Keep wheel / trackpad overscroll inside the full-screen workbench. */
+.floorplan-annotation.is-focused {
+  overscroll-behavior: contain;
+}
+.floorplan-annotation.is-focused .floorplan-annotation-panel {
+  overscroll-behavior-y: contain;
+}
+.floorplan-annotation.is-focused .floorplan-annotation-canvas-shell {
+  overscroll-behavior: contain;
+}

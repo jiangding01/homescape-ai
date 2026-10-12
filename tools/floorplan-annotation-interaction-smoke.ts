@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { lockAnnotationBackgroundScroll } from '../apps/web/src/floorplan-annotation-scroll-lock'
 import { clickNearStart, clampViewport, fullViewport, insertPolygonVertex, orthogonalEdge, orthogonalPoint, removePolygonVertex, zoomViewport } from '../apps/web/src/floorplan-annotation-geometry'
 
 assert.deepEqual(orthogonalPoint([100, 100], [220, 119]), [220, 100])
@@ -36,3 +37,21 @@ assert.throws(() => insertPolygonVertex(room, openings, 0), /Opening/)
 const removedFirst = removePolygonVertex({ ...room, boundaryPx: room.boundaryPx.slice(0, 4) },
   [{ ...openings[1], edgeIndex: 2 }], 0)
 assert.equal(removedFirst.openings[0]?.edgeIndex, 1)
+
+const scrollHost = {
+  documentElement: { style: { overflow: 'auto', overscrollBehavior: 'contain' } },
+  body: { style: { overflow: '', overscrollBehavior: '' } },
+}
+const unlock = lockAnnotationBackgroundScroll(scrollHost)
+assert.equal(scrollHost.documentElement.style.overflow, 'hidden')
+assert.equal(scrollHost.body.style.overflow, 'hidden')
+assert.equal(scrollHost.documentElement.style.overscrollBehavior, 'none')
+assert.equal(scrollHost.body.style.overscrollBehavior, 'none')
+unlock()
+assert.deepEqual(scrollHost, {
+  documentElement: { style: { overflow: 'auto', overscrollBehavior: 'contain' } },
+  body: { style: { overflow: '', overscrollBehavior: '' } },
+})
+// Locking after cleanup must also restore correctly (simulated React StrictMode cycle).
+lockAnnotationBackgroundScroll(scrollHost)()
+assert.equal(scrollHost.documentElement.style.overflow, 'auto')

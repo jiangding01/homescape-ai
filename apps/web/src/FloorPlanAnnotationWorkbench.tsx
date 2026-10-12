@@ -16,6 +16,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { clickNearStart, clampViewport, fullViewport, insertPolygonVertex, orthogonalEdge, orthogonalPoint, removePolygonVertex, zoomViewport, type AnnotationViewport } from './floorplan-annotation-geometry'
+import { lockAnnotationBackgroundScroll } from './floorplan-annotation-scroll-lock'
 
 const roomTypeOptions: Array<{ value: RoomType; label: string }> = [
   { value: 'living', label: '客厅' },
@@ -494,6 +495,13 @@ export function FloorPlanAnnotationWorkbench({
     setSourceImage(null)
     setAnnotationError(null)
   }, [resetKey])
+
+  // Only the foreground sidebar may scroll while the annotation workspace is open.
+  // Cleanup restores the exact previous page styles on close, unmount and HMR.
+  useEffect(() => {
+    if (!focusMode) return
+    return lockAnnotationBackgroundScroll(document)
+  }, [focusMode])
 
   useEffect(() => {
     return () => {
