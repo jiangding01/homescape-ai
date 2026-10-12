@@ -15,6 +15,7 @@ import {
   type ChangeEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { clickNearStart, clampViewport, fullViewport, orthogonalEdge, orthogonalPoint, zoomViewport, type AnnotationViewport } from './floorplan-annotation-geometry'
 
 const roomTypeOptions: Array<{ value: RoomType; label: string }> = [
   { value: 'living', label: '客厅' },
@@ -449,6 +450,11 @@ export function FloorPlanAnnotationWorkbench({
   const [blankCaseId, setBlankCaseId] = useState('')
   const [drawingPoints, setDrawingPoints] = useState<PixelPoint[] | null>(null)
   const [geometryReviewed, setGeometryReviewed] = useState(false)
+  const [focusMode, setFocusMode] = useState(false)
+  const [orthogonalMode, setOrthogonalMode] = useState(true)
+  const [panMode, setPanMode] = useState(false)
+  const [viewport, setViewport] = useState<AnnotationViewport | null>(null)
+  const [cursorPoint, setCursorPoint] = useState<PixelPoint | null>(null)
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(
     null,
   )
@@ -462,6 +468,7 @@ export function FloorPlanAnnotationWorkbench({
     string | null
   >(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const panStart = useRef<{ x: number; y: number; view: AnnotationViewport } | null>(null)
   const sourceLoadSequenceRef = useRef(0)
 
   useEffect(() => {
@@ -470,6 +477,9 @@ export function FloorPlanAnnotationWorkbench({
     setStartedAt(null)
     setDrawingPoints(null)
     setGeometryReviewed(false)
+    setViewport(null)
+    setPanMode(false)
+    setCursorPoint(null)
     setBlankCaseId('')
     setEditCounts(initialEditCounts)
     setTouchedRoomIds(new Set<string>())
@@ -595,6 +605,7 @@ export function FloorPlanAnnotationWorkbench({
 
     setStartedAt((current) => current ?? Date.now())
     setGeometryReviewed(false)
+    setViewport(null)
     setSourceImage({
       url: '/floorplan-demo.svg',
       widthPx: 1080,
@@ -632,6 +643,7 @@ export function FloorPlanAnnotationWorkbench({
       }
       setStartedAt((current) => current ?? Date.now())
       setGeometryReviewed(false)
+      setViewport(null)
       setSourceImage((current) => {
         if (current?.objectUrl) {
           URL.revokeObjectURL(current.url)
@@ -661,6 +673,7 @@ export function FloorPlanAnnotationWorkbench({
   const clearSource = () => {
     sourceLoadSequenceRef.current += 1
     setGeometryReviewed(false)
+    setViewport(null)
     setSourceImage(null)
     setAnnotationError(null)
   }
@@ -685,12 +698,19 @@ export function FloorPlanAnnotationWorkbench({
     ]
   }
 
+  const sourceWidth = workingDraft.source.widthPx
+  const sourceHeight = workingDraft.source.heightPx
+  const visibleView = viewport ?? fullViewport(sourceWidth, sourceHeight)
+  const zoom = sourceWidth / visibleView.width
+  const zoomBy = (factor: number) => setViewport((old) =>
+    zoomViewport(old ?? fullViewport(sourceWidth, sourceHeight), factor, sourceWidth, sourceHeight))
+
   const startRoomDrag = (
     roomId: string,
     pointIndex: number,
     event: ReactPointerEvent<SVGCircleElement>,
   ) => {
-    if (disabled || drawingPoints !== null) return
+    if (disabled || drawingPoints !== null || panMode) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     setSelectedRoomId(roomId)
@@ -706,7 +726,7 @@ export function FloorPlanAnnotationWorkbench({
     endpoint: 'start' | 'end',
     event: ReactPointerEvent<SVGCircleElement>,
   ) => {
-    if (disabled || drawingPoints !== null) return
+    if (disabled || drawingPoints !== null || panMode) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     setDragTarget({ type: 'calibration', endpoint })
@@ -714,6 +734,22 @@ export function FloorPlanAnnotationWorkbench({
   }
 
   const moveDrag = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (panStart.current) {
+      const pan = panStart.current
+      const svgScale = svgRef.current?.getScreenCTM()?.a
+      if (!svgScale) return
+      setViewport(clampViewport({
+        ...pan.view,
+        x: pan.view.x - (event.clientX - pan.x) / svgScale,
+        y: pan.view.y - (event.clientY - pan.y) / svgScale,
+      }, sourceWidth, sourceHeight))
+      return
+    }
+    if (drawingPoints !== null && !disabled) {
+      const pointer = pointFromPointer(event)
+      if (pointer) setCursorPoint(orthogonalMode && drawingPoints.length
+        ? orthogonalPoint(drawingPoints[drawingPoints.length - 1]!, pointer) : pointer)
+    }
     if (!dragTarget || disabled) return
 
     const point = pointFromPointer(event)
@@ -742,10 +778,12 @@ export function FloorPlanAnnotationWorkbench({
 
   const stopDrag = () => {
     setDragTarget(null)
+    panStart.current = null
   }
 
   const resetAnnotation = () => {
     setDrawingPoints(null)
+    setCursorPoint(null)
     setGeometryReviewed(false)
     setWorkingDraft(cloneDraft(draft))
     setSelectedRoomId(draft.rooms[0]?.id ?? '')
@@ -780,6 +818,8 @@ export function FloorPlanAnnotationWorkbench({
     }))
     setSelectedRoomId('')
     setDrawingPoints(null)
+    setCursorPoint(null)
+    setViewport(null)
     setGeometryReviewed(false)
     setTouchedRoomIds(new Set<string>())
     recordEdit('resets')
@@ -791,6 +831,11 @@ export function FloorPlanAnnotationWorkbench({
     const points = [...drawingPoints]
     if (points.length >= 2 && pointDistance(points[0]!, points[points.length - 1]!) < 3) {
       points.pop()
+    }
+    if (orthogonalMode && points.length >= 3 &&
+        !orthogonalEdge(points[points.length - 1]!, points[0]!)) {
+      setAnnotationError('正交模式下末边未对齐，请补一个水平/竖直转角再闭合，或关闭正交绘制')
+      return
     }
     if (points.length < 3 ||
         Math.abs(polygonSignedArea(points)) <= 1 ||
@@ -816,6 +861,7 @@ export function FloorPlanAnnotationWorkbench({
     }))
     setSelectedRoomId(id)
     setDrawingPoints(null)
+    setCursorPoint(null)
     setGeometryReviewed(false)
     recordEdit('roomStructureEdits', id)
     setAnnotationError(null)
@@ -965,14 +1011,10 @@ export function FloorPlanAnnotationWorkbench({
     setAnnotationError(null)
   }
 
-  const viewBox =
-    '0 0 ' +
-    workingDraft.source.widthPx +
-    ' ' +
-    workingDraft.source.heightPx
+  const viewBox = [visibleView.x, visibleView.y, visibleView.width, visibleView.height].join(' ')
 
   return (
-    <div className="floorplan-annotation">
+    <div className={focusMode ? 'floorplan-annotation is-focused' : 'floorplan-annotation'}>
       <div className="floorplan-annotation-head">
         <div>
           <strong>Ground Truth Annotation</strong>
@@ -1001,6 +1043,9 @@ export function FloorPlanAnnotationWorkbench({
           <button type="button" disabled={disabled} onClick={resetAnnotation}>
             重置校正
           </button>
+          <button type="button" onClick={() => setFocusMode((old) => !old)}>
+            {focusMode ? '退出专注模式' : '大画布专注模式'}
+          </button>
         </div>
       </div>
 
@@ -1013,18 +1058,24 @@ export function FloorPlanAnnotationWorkbench({
         <button type="button" disabled={disabled || !sourceImage} onClick={startBlankAnnotation}>
           从原图开始空白标注
         </button>
+        <label className="floorplan-orthogonal-toggle">
+          <input type="checkbox" checked={orthogonalMode}
+            disabled={disabled || drawingPoints !== null}
+            onChange={(event) => setOrthogonalMode(event.target.checked)} />
+          正交绘制（锁定水平/垂直）
+        </label>
         {drawingPoints === null ? (
           <button type="button" disabled={disabled || !sourceImage || !aspectRatioCompatible}
-            onClick={() => { setDrawingPoints([]); setGeometryReviewed(false); setAnnotationError(null) }}>
+            onClick={() => { setDrawingPoints([]); setCursorPoint(null); setPanMode(false); setGeometryReviewed(false); setAnnotationError(null) }}>
             绘制新房间
           </button>
         ) : (
           <>
-            <span>已放置 {drawingPoints.length} 个顶点（逐点点击原图）</span>
+            <span>已放置 {drawingPoints.length} 个顶点（点击首点闭合）</span>
             <button type="button" disabled={disabled || drawingPoints.length < 3} onClick={finishDrawingRoom}>完成房间</button>
             <button type="button" disabled={disabled || drawingPoints.length === 0}
-              onClick={() => setDrawingPoints((points) => points?.slice(0, -1) ?? null)}>撤销顶点</button>
-            <button type="button" disabled={disabled} onClick={() => setDrawingPoints(null)}>取消绘制</button>
+              onClick={() => { setDrawingPoints((points) => points?.slice(0, -1) ?? null); setCursorPoint(null) }}>撤销顶点</button>
+            <button type="button" disabled={disabled} onClick={() => { setDrawingPoints(null); setCursorPoint(null) }}>取消绘制</button>
           </>
         )}
       </div>
@@ -1047,6 +1098,15 @@ export function FloorPlanAnnotationWorkbench({
             ) : (
               <span>Source 未加载</span>
             )}
+            <div className="floorplan-zoom-controls">
+              <button type="button" disabled={zoom >= 8} onClick={() => zoomBy(1.5)}>＋ 放大</button>
+              <span>{zoom.toFixed(1)}×</span>
+              <button type="button" disabled={zoom <= 1} onClick={() => zoomBy(1 / 1.5)}>－ 缩小</button>
+              <button type="button" onClick={() => setViewport(null)}>适应</button>
+              <button type="button" aria-pressed={panMode} onClick={() => setPanMode((v) => !v)}>
+                {panMode ? '停止平移' : '平移画布'}
+              </button>
+            </div>
             <label>
               Overlay
               <input
@@ -1064,21 +1124,36 @@ export function FloorPlanAnnotationWorkbench({
 
           <svg
             ref={svgRef}
-            className="floorplan-annotation-canvas"
+            className={panMode ? 'floorplan-annotation-canvas is-panning' : 'floorplan-annotation-canvas'}
             viewBox={viewBox}
+            style={{ aspectRatio: `${sourceWidth} / ${sourceHeight}` }}
             onPointerDown={(event) => {
-              if (disabled || drawingPoints === null || event.button !== 0 ||
-                  !sourceImage || !aspectRatioCompatible) return
+              if (disabled || event.button !== 0) return
+              if (panMode) {
+                if (zoom <= 1) return
+                event.currentTarget.setPointerCapture(event.pointerId)
+                panStart.current = { x: event.clientX, y: event.clientY, view: visibleView }
+                event.preventDefault()
+                return
+              }
+              if (drawingPoints === null || !sourceImage || !aspectRatioCompatible) return
               const point = pointFromPointer(event)
               if (!point) return
               event.preventDefault()
+              if (drawingPoints.length >= 3 && clickNearStart(drawingPoints[0]!, point, zoom)) {
+                finishDrawingRoom()
+                return
+              }
+              const snapped = orthogonalMode && drawingPoints.length
+                ? orthogonalPoint(drawingPoints[drawingPoints.length - 1]!, point) : point
+              setGeometryReviewed(false)
               setDrawingPoints((current) => current === null ? null :
-                [...current, [Math.round(point[0] * 100) / 100, Math.round(point[1] * 100) / 100]])
+                [...current, [Math.round(snapped[0] * 100) / 100, Math.round(snapped[1] * 100) / 100]])
             }}
             onPointerMove={moveDrag}
             onPointerUp={stopDrag}
             onPointerCancel={stopDrag}
-            onPointerLeave={stopDrag}
+            onPointerLeave={() => { if (!panStart.current) stopDrag(); setCursorPoint(null) }}
             role="img"
             aria-label="户型 Ground Truth 几何校正画布"
           >
@@ -1110,7 +1185,7 @@ export function FloorPlanAnnotationWorkbench({
                         : 'floorplan-annotation-room'
                     }
                     points={points}
-                    onPointerDown={() => setSelectedRoomId(room.id)}
+                    onPointerDown={() => { if (!panMode) setSelectedRoomId(room.id) }}
                   />
                   <text
                     className="floorplan-annotation-label"
@@ -1146,9 +1221,17 @@ export function FloorPlanAnnotationWorkbench({
                   fill="none"
                   points={drawingPoints.map((point) => point.join(',')).join(' ')}
                 />
+                {cursorPoint ? (
+                  <line className="floorplan-drawing-line floorplan-preview-line"
+                    x1={drawingPoints[drawingPoints.length - 1]![0]}
+                    y1={drawingPoints[drawingPoints.length - 1]![1]}
+                    x2={cursorPoint[0]} y2={cursorPoint[1]} />
+                ) : null}
                 {drawingPoints.map((point, index) => (
-                  <circle key={index} className="floorplan-drawing-point"
-                    cx={point[0]} cy={point[1]} r="5" />
+                  <circle key={index}
+                    className={index === 0 ? 'floorplan-drawing-point first' : 'floorplan-drawing-point'}
+                    cx={point[0]} cy={point[1]}
+                    r={index === 0 ? Math.max(5, 8 / zoom) : Math.max(3, 5 / zoom)} />
                 ))}
               </g>
             ) : null}
@@ -1460,7 +1543,7 @@ export function FloorPlanAnnotationWorkbench({
                   recordEdit('assumptionEdits')
                 }}
               />
-              墙厚已人工确认
+              墙厚有可靠建筑资料佐证（否则不要勾选）
             </label>
             <label>
               Ceiling Height m
@@ -1504,7 +1587,7 @@ export function FloorPlanAnnotationWorkbench({
                   recordEdit('assumptionEdits')
                 }}
               />
-              层高已人工确认
+              层高有可靠建筑资料佐证（否则不要勾选）
             </label>
           </div>
 

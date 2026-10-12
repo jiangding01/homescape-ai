@@ -627,3 +627,24 @@
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
+\n/* PR #17 · precision annotation */
+.floorplan-annotation.is-focused {
+  position: fixed;
+  inset: 12px;
+  z-index: 1000;
+  overflow: auto;
+  padding: 16px;
+  background: #f6f3ed;
+  border: 1px solid #bbb4a9;
+  box-shadow: 0 12px 50px rgba(25, 25, 20, 0.25);
+}
+.floorplan-annotation.is-focused .floorplan-annotation-canvas { max-height: none; height: min(76vh, 1050px); }
+.floorplan-annotation-canvas { max-height: 780px; }
+.floorplan-annotation-canvas.is-panning { cursor: grab; }
+.floorplan-annotation-canvas.is-panning:active { cursor: grabbing; }
+.floorplan-orthogonal-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.floorplan-zoom-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.floorplan-zoom-controls button { padding: 3px 7px; border: 1px solid #bdb6aa; background: #fffdf8; cursor: pointer; font-size: 11px; }
+.floorplan-zoom-controls button[aria-pressed='true'] { background: #34382f; color: #fffdf8; }
+.floorplan-drawing-point.first { fill: #ffb25c; stroke: #8d421a; }
+.floorplan-preview-line { opacity: 0.65; stroke-dasharray: 4 6; }
