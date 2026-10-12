@@ -294,6 +294,7 @@ PR #17 的 Batch 在执行 Corpus Gate 和 Raster Extractor 前进行全量 Pref
 - 对全部 Candidate、Metadata、报告、Manifest 输出路径进行根目录边界检查；
 - 检查输出位置已有的符号链接，禁止输出目录越界与文件符号链接写入；
 - 拒绝不同输出角色共用同一文件路径，以及大小写差异引起的跨平台路径冲突；
+- 拒绝自定义报告位置覆盖 Corpus Manifest、原图或 Ground Truth 输入文件；
 - 如果后续 Case 在 Preflight 阶段就无效，本轮不会先生成前面 Case 的 Candidate。
 
 CI 中的 `floorplan:raster:batch:check-demo` 覆盖路径逃逸、输出文件符号链接、输出路径冲突及后续 Case 扩展名错误。
