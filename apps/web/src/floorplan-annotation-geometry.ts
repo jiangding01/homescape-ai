@@ -1,4 +1,4 @@
-import type { PixelPoint } from '@homescape/spatial-model'
+import type { FloorPlanDraftOpening, FloorPlanDraftRoom, PixelPoint } from '@homescape/spatial-model'
 
 export interface AnnotationViewport {
   x: number
@@ -43,3 +43,48 @@ export const orthogonalEdge = (a: PixelPoint, b: PixelPoint) =>
 
 export const clickNearStart = (a: PixelPoint, b: PixelPoint, zoom: number) =>
   Math.hypot(a[0] - b[0], a[1] - b[1]) <= Math.max(3, 18 / zoom)
+
+/** Keep unaffected Opening edge references stable when editing polygons. */
+export function removePolygonVertex(
+  room: FloorPlanDraftRoom,
+  openings: readonly FloorPlanDraftOpening[],
+  index: number,
+): { room: FloorPlanDraftRoom; openings: FloorPlanDraftOpening[] } {
+  const n = room.boundaryPx.length
+  if (!Number.isInteger(index) || index < 0 || index >= n) throw new Error('请选择有效顶点')
+  if (n <= 3) throw new Error('房间至少保留 3 个顶点')
+  const previous = (index + n - 1) % n
+  if (openings.some((o) => o.roomId === room.id &&
+    (o.edgeIndex === index || o.edgeIndex === previous))) {
+    throw new Error('该顶点关联的墙边有 Opening，请先调整对应门窗')
+  }
+  return {
+    room: { ...room, boundaryPx: room.boundaryPx.filter((_, i) => i !== index) },
+    openings: openings.map((o) => o.roomId === room.id && o.edgeIndex > index
+      ? { ...o, edgeIndex: o.edgeIndex - 1 } : o),
+  }
+}
+
+export function insertPolygonVertex(
+  room: FloorPlanDraftRoom,
+  openings: readonly FloorPlanDraftOpening[],
+  index: number,
+): { room: FloorPlanDraftRoom; openings: FloorPlanDraftOpening[] } {
+  const n = room.boundaryPx.length
+  if (!Number.isInteger(index) || index < 0 || index >= n) throw new Error('请选择有效顶点')
+  if (openings.some((o) => o.roomId === room.id && o.edgeIndex === index)) {
+    throw new Error('要拆分的墙边有 Opening，请先调整对应门窗')
+  }
+  const a = room.boundaryPx[index]!
+  const b = room.boundaryPx[(index + 1) % n]!
+  const mid: PixelPoint = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+  return {
+    room: { ...room, boundaryPx: [
+      ...room.boundaryPx.slice(0, index + 1),
+      mid,
+      ...room.boundaryPx.slice(index + 1),
+    ] },
+    openings: openings.map((o) => o.roomId === room.id && o.edgeIndex > index
+      ? { ...o, edgeIndex: o.edgeIndex + 1 } : o),
+  }
+}

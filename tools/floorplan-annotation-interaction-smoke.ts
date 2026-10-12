@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { clickNearStart, clampViewport, fullViewport, orthogonalEdge, orthogonalPoint, zoomViewport } from '../apps/web/src/floorplan-annotation-geometry'
+import { clickNearStart, clampViewport, fullViewport, insertPolygonVertex, orthogonalEdge, orthogonalPoint, removePolygonVertex, zoomViewport } from '../apps/web/src/floorplan-annotation-geometry'
 
 assert.deepEqual(orthogonalPoint([100, 100], [220, 119]), [220, 100])
 assert.deepEqual(orthogonalPoint([100, 100], [116, 230]), [100, 230])
@@ -17,3 +17,22 @@ assert.deepEqual(clampViewport({ x: -100, y: 900, width: 400, height: 400 }, 992
 })
 assert.equal(zoomViewport(fullViewport(992, 562), 2, 992, 562).height, 281)
 process.stderr.write('FloorPlan annotation interaction geometry smoke passed\n')
+
+const room = { id: 'r1', name: '客餐厅', type: 'living', boundaryPx:
+  [[0, 0], [10, 0], [10, 10], [0, 10], [0, 5]] as [number, number][] }
+const openings = [
+  { id: 'door', roomId: 'r1', edgeIndex: 0, kind: 'door', offsetPx: 1, widthPx: 2, heightMeters: 2.1 },
+  { id: 'window', roomId: 'r1', edgeIndex: 2, kind: 'window', offsetPx: 2, widthPx: 3, heightMeters: 1.4 },
+] as const
+const reduced = removePolygonVertex(room, openings, 4)
+assert.equal(reduced.room.boundaryPx.length, 4)
+assert.deepEqual(reduced.openings.map(o => o.edgeIndex), [0, 2])
+assert.throws(() => removePolygonVertex(room, openings, 0), /Opening/)
+assert.throws(() => removePolygonVertex({ ...room, boundaryPx: room.boundaryPx.slice(0, 3) }, [], 0), /至少保留 3/)
+const extended = insertPolygonVertex(room, openings, 1)
+assert.deepEqual(extended.room.boundaryPx[2], [10, 5])
+assert.deepEqual(extended.openings.map(o => o.edgeIndex), [0, 3])
+assert.throws(() => insertPolygonVertex(room, openings, 0), /Opening/)
+const removedFirst = removePolygonVertex({ ...room, boundaryPx: room.boundaryPx.slice(0, 4) },
+  [{ ...openings[1], edgeIndex: 2 }], 0)
+assert.equal(removedFirst.openings[0]?.edgeIndex, 1)
