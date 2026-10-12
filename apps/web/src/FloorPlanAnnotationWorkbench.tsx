@@ -473,6 +473,7 @@ export function FloorPlanAnnotationWorkbench({
   >(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const panStart = useRef<{ x: number; y: number; view: AnnotationViewport } | null>(null)
+  const editDragStart = useRef<{ point: PixelPoint; counted: boolean } | null>(null)
   const sourceLoadSequenceRef = useRef(0)
 
   useEffect(() => {
@@ -763,7 +764,8 @@ export function FloorPlanAnnotationWorkbench({
       roomId,
       pointIndex,
     })
-    recordEdit('roomVertexMoves', roomId)
+    const point = workingDraft.rooms.find((room) => room.id === roomId)?.boundaryPx[pointIndex]
+    editDragStart.current = point ? { point, counted: false } : null
   }
 
   const startCalibrationDrag = (
@@ -774,7 +776,10 @@ export function FloorPlanAnnotationWorkbench({
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     setDragTarget({ type: 'calibration', endpoint })
-    recordEdit('calibrationEdits')
+    editDragStart.current = {
+      point: workingDraft.calibration[endpoint === 'start' ? 'startPx' : 'endPx'],
+      counted: false,
+    }
   }
 
   const moveDrag = (event: ReactPointerEvent<SVGSVGElement>) => {
@@ -798,6 +803,13 @@ export function FloorPlanAnnotationWorkbench({
 
     const point = pointFromPointer(event)
     if (!point) return
+    const gesture = editDragStart.current
+    if (gesture && !gesture.counted) {
+      if (pointDistance(gesture.point, point) <= 1) return
+      gesture.counted = true
+      if (dragTarget.type === 'room_vertex') recordEdit('roomVertexMoves', dragTarget.roomId)
+      else recordEdit('calibrationEdits')
+    }
     setGeometryReviewed(false)
 
     if (dragTarget.type === 'room_vertex') {
@@ -822,6 +834,7 @@ export function FloorPlanAnnotationWorkbench({
 
   const stopDrag = () => {
     setDragTarget(null)
+    editDragStart.current = null
     panStart.current = null
   }
 
