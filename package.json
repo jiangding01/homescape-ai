@@ -32,6 +32,7 @@
     "floorplan:real:intake:check-demo": "node tools/floorplan-real-intake-smoke.mjs"
   },
   "devDependencies": {
+    "@homescape/floorplan-extractor": "workspace:*",
     "prettier": "^3.6.2",
     "turbo": "^2.5.6",
     "typescript": "^5.9.2",

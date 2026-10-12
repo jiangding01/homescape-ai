@@ -30,6 +30,12 @@ jobs:
       - name: Install
         run: pnpm install --no-frozen-lockfile
 
+      - name: Root Workspace CLI smoke
+        run: |
+          node --import tsx --input-type=module -e "await import('@homescape/floorplan-extractor'); await import('@homescape/floorplan-extractor/node')"
+          pnpm floorplan:geometry:check-demo
+          pnpm floorplan:extract-demo
+
       - name: Typecheck
         run: pnpm typecheck
 

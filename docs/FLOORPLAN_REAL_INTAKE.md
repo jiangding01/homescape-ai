@@ -99,3 +99,22 @@ Pilot A 有 2/10、Pilot B 有 8/10 满足“至少两个水平与垂直墙线�
 
 真实案例失败时不得为了凑出 `benchmarkReady=true` 而直接修改阈值、
 推测真实尺寸或将 Candidate 充当 Ground Truth。
+
+## Monorepo 根目录 CLI 的依赖约束
+
+`tools/floorplan-raster-extract.ts`、`tools/floorplan-geometry-smoke.ts` 等根目录入口
+直接引用 `@homescape/floorplan-extractor`。因此根项目的
+`package.json` 必须显式声明 `"@homescape/floorplan-extractor": "workspace:*"`，
+不能只依赖 `packages/floorplan-extractor/package.json` 的存在。
+
+本地拉取最新 PR #17 分支后，在仓库根目录运行：
+
+```bash
+pnpm install --no-frozen-lockfile
+node --import tsx --input-type=module -e "await import('@homescape/floorplan-extractor'); await import('@homescape/floorplan-extractor/node')"
+pnpm floorplan:geometry:check-demo
+```
+
+`MODULE_NOT_FOUND: @homescape/floorplan-extractor` 代表 Workspace CLI 未正确安装，
+属于环境 / 依赖解析失败，不得统计为真实户型识别的 Algorithm Failure。
+CI 在运行真实算法的 Synthetic Smoke 之外，另执行根目录 CLI 的解析与实际跑数检查。
