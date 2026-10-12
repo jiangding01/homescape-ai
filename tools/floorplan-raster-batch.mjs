@@ -444,8 +444,17 @@ async function main() {
   await assertSafeOutputPath(root, benchmarkReportPath, 'benchmark-report')
 
   const preparedCases = []
-  for (const corpusCase of preparedCases) {
-    const sourcePath = corpusCase.sourcePath
+  for (const [index, corpusCase] of manifest.cases.entries()) {
+    const sourcePath = await resolveWithinRoot(
+      root,
+      corpusCase.sourcePath,
+      'cases[' + index + '].sourcePath',
+    )
+    assertExtensionMatches(
+      sourcePath,
+      corpusCase.mediaType,
+      'cases[' + index + ']',
+    )
     preparedCases.push({ ...corpusCase, sourcePath })
   }
 
@@ -489,17 +498,8 @@ async function main() {
   const outputs = []
   const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
 
-  for (const [index, corpusCase] of manifest.cases.entries()) {
-    const sourcePath = await resolveWithinRoot(
-      root,
-      corpusCase.sourcePath,
-      'cases[' + index + '].sourcePath',
-    )
-    assertExtensionMatches(
-      sourcePath,
-      corpusCase.mediaType,
-      'cases[' + index + ']',
-    )
+  for (const corpusCase of preparedCases) {
+    const sourcePath = corpusCase.sourcePath
 
     const candidatePath = resolve(
       candidateRoot,
