@@ -1238,7 +1238,7 @@ export function FloorPlanAnnotationWorkbench({
               setCanvasHovered(false)
               if (!panStart.current) stopDrag()
               setCursorPoint(null)
-            }
+            }}
             role="img"
             aria-label="户型 Ground Truth 几何校正画布"
           >
