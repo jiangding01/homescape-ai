@@ -408,6 +408,33 @@ async function main() {
     args.extractorId,
   )
 
+  // 输出不能与 Corpus Manifest、原图或 Ground Truth 文件共用同一目标，
+  // 即便调用者通过自定义 --report/--corpus-report 指向了有效的 Corpus 内路径。
+  const protectedInputPaths = new Set([
+    (await realpath(args.manifestPath)).toLowerCase(),
+  ])
+  const preparedCases = []
+  for (const [index, corpusCase] of manifest.cases.entries()) {
+    const sourcePath = await resolveWithinRoot(
+      root,
+      corpusCase.sourcePath,
+      'cases[' + index + '].sourcePath',
+    )
+    const groundTruthPath = await resolveWithinRoot(
+      root,
+      corpusCase.groundTruthPath,
+      'cases[' + index + '].groundTruthPath',
+    )
+    assertExtensionMatches(
+      sourcePath,
+      corpusCase.mediaType,
+      'cases[' + index + ']',
+    )
+    protectedInputPaths.add(sourcePath.toLowerCase())
+    protectedInputPaths.add(groundTruthPath.toLowerCase())
+    preparedCases.push({ ...corpusCase, resolvedSourcePath: sourcePath })
+  }
+
   // 在任何写入或 Extractor 启动前验证全部输出，避免路径别名、符号链接和
   // 后续 Case 输入错误让本轮留下部分 Candidate / Metadata。
   const writablePaths = [
@@ -433,6 +460,18 @@ async function main() {
     const absolutePath = assertOutputWithinRoot(root, path, label)
     // 对默认不区分文件名大小写的系统也保留一致的输出契约。
     const identity = absolutePath.toLowerCase()
+    if (protectedInputPaths.has(identity)) {
+      throw new Error(label + ' 与 Corpus 输入文件路径冲突')
+    }
+    let existingTarget
+    try {
+      existingTarget = await realpath(absolutePath)
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+    if (existingTarget && protectedInputPaths.has(existingTarget.toLowerCase())) {
+      throw new Error(label + ' 与 Corpus 输入文件路径冲突')
+    }
     if (seenWritablePaths.has(identity)) {
       throw new Error(
         label + ' 与 ' + seenWritablePaths.get(identity) + ' 输出路径冲突',
@@ -441,21 +480,6 @@ async function main() {
     seenWritablePaths.set(identity, label)
     await assertSafeOutputPath(root, absolutePath, label)
   }
-  const preparedCases = []
-  for (const [index, corpusCase] of manifest.cases.entries()) {
-    const sourcePath = await resolveWithinRoot(
-      root,
-      corpusCase.sourcePath,
-      'cases[' + index + '].sourcePath',
-    )
-    assertExtensionMatches(
-      sourcePath,
-      corpusCase.mediaType,
-      'cases[' + index + ']',
-    )
-    preparedCases.push({ ...corpusCase, resolvedSourcePath: sourcePath })
-  }
-
   await mkdir(dirname(corpusReportPath), { recursive: true })
   await mkdir(dirname(reportPath), { recursive: true })
   await mkdir(dirname(benchmarkManifestPath), { recursive: true })
