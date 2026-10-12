@@ -181,3 +181,16 @@ PR #13 暂不实现：
 Review Burden Sidecar 不记录本地原图文件名，只保留 Source 尺寸与是否通过宽高比校验。
 
 真实 Corpus 的 sourceLabel / Case ID 应使用匿名标识，避免把住址、客户姓名等信息写进 Ground Truth 或 Review Report。
+
+## PR #17 · 真实样本无 Candidate 时的人工标注
+
+首轮真实 Pilot 中仅 10/20 张生成未审核 Candidate，且多份存在漏分房 / 碎片化。
+仅修改已有顶点无法标注 `no_orthogonal_outline` Case，因此现在支持：
+
+1. 导入原图，输入**匿名** Case ID（勿使用地址 / 人名），点击「从原图开始空白标注」。该操作清空当前房间与 Opening，并将 Source 尺寸设为原图实际尺寸；**真实距离设为 0**，强制重新测量，不能用假设比例尺当 GT。
+2. 点击「绘制新房间」，在原图上按房间真实边界依次点击任意数量的顶点；完成 / 撤销顶点 / 取消均可操作。无效、重复点、自交多边形不能完成。
+3. 给新 Room 填写真实名称与类型；可删除误识别房间（连同其 Opening）；手工新增 Opening 时需逐项检查 Room Edge、Offset、Width、Kind。
+4. 核对图片、房间划分、室内与室外的分类、所有 Opening、Calibration 与墙厚层高；勾选「已人工核对」后方可经原 Gate 导出 GT。
+5. `roomStructureEdits` 记录新增或删除 Room 的次数；既有 Review Burden 允许该字段缺失，按 0 统计。此字段不会让手工生成的 Ground Truth 冒充自动 Candidate。
+
+注意：PR #17 的手工标注能力并不能自动判断房间边界。原图、私有 Ground Truth 及任何带真实楼盘信息的素材都保留在 `.floorplan-corpus`，不能提交公开仓库。

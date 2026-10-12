@@ -56,6 +56,7 @@ const initialEditCounts: EditCounts = {
   calibrationEdits: 0,
   assumptionEdits: 0,
   resets: 0,
+  roomStructureEdits: 0,
 }
 
 function cloneDraft(draft: FloorPlanDraft): FloorPlanDraft {
@@ -242,6 +243,10 @@ function getDraftIssues(draft: FloorPlanDraft) {
     issues.push('层高尚未人工确认')
   }
 
+  if (draft.rooms.length === 0) {
+    issues.push('Ground Truth 至少需要一个已标注的 Room')
+  }
+
   const entityIds = new Set<string>()
   const roomById = new Map(
     draft.rooms.map((room) => [room.id, room]),
@@ -271,6 +276,10 @@ function getDraftIssues(draft: FloorPlanDraft) {
       )
     ) {
       issues.push(room.name + ' 边界超出 Source')
+    }
+
+    if (room.name.startsWith('待命名房间-')) {
+      issues.push(room.name + ' 必须填写真实房间名称')
     }
 
     if (Math.abs(polygonSignedArea(room.boundaryPx)) <= 1) {
@@ -443,6 +452,9 @@ export function FloorPlanAnnotationWorkbench({
   const [selectedRoomId, setSelectedRoomId] = useState(
     draft.rooms[0]?.id ?? '',
   )
+  const [blankCaseId, setBlankCaseId] = useState('')
+  const [drawingPoints, setDrawingPoints] = useState<PixelPoint[] | null>(null)
+  const [geometryReviewed, setGeometryReviewed] = useState(false)
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(
     null,
   )
@@ -462,6 +474,9 @@ export function FloorPlanAnnotationWorkbench({
     setWorkingDraft(cloneDraft(draft))
     setSelectedRoomId(draft.rooms[0]?.id ?? '')
     setStartedAt(null)
+    setDrawingPoints(null)
+    setGeometryReviewed(false)
+    setBlankCaseId('')
     setEditCounts(initialEditCounts)
     setTouchedRoomIds(new Set<string>())
     sourceLoadSequenceRef.current += 1
@@ -484,7 +499,7 @@ export function FloorPlanAnnotationWorkbench({
     setStartedAt((current) => current ?? Date.now())
     setEditCounts((current) => ({
       ...current,
-      [kind]: current[kind] + 1,
+      [kind]: (current[kind] ?? 0) + 1,
     }))
 
     if (roomId) {
@@ -500,6 +515,7 @@ export function FloorPlanAnnotationWorkbench({
     roomId: string,
     updater: (room: FloorPlanDraftRoom) => FloorPlanDraftRoom,
   ) => {
+    setGeometryReviewed(false)
     setWorkingDraft((current) => ({
       ...current,
       rooms: current.rooms.map((room) =>
@@ -514,6 +530,7 @@ export function FloorPlanAnnotationWorkbench({
       opening: FloorPlanDraftOpening,
     ) => FloorPlanDraftOpening,
   ) => {
+    setGeometryReviewed(false)
     setWorkingDraft((current) => ({
       ...current,
       openings: current.openings.map((opening) =>
@@ -559,12 +576,16 @@ export function FloorPlanAnnotationWorkbench({
       ...(workingDraft.source.kind === 'floorplan_pdf'
         ? ['PR #13 暂不支持 PDF 原图视觉复核']
         : []),
+      ...(drawingPoints !== null ? ['房间多边形尚未绘制完成'] : []),
+      ...(!geometryReviewed ? ['请人工核对全部房间与开口后确认'] : []),
       ...(sourceImage && !aspectRatioCompatible
         ? ['原图与 Draft 宽高比不一致']
         : []),
     ],
     [
       aspectRatioCompatible,
+      drawingPoints,
+      geometryReviewed,
       issues,
       sourceImage,
       workingDraft.source.kind,
@@ -672,7 +693,7 @@ export function FloorPlanAnnotationWorkbench({
     pointIndex: number,
     event: ReactPointerEvent<SVGCircleElement>,
   ) => {
-    if (disabled) return
+    if (disabled || drawingPoints !== null) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     setSelectedRoomId(roomId)
@@ -688,7 +709,7 @@ export function FloorPlanAnnotationWorkbench({
     endpoint: 'start' | 'end',
     event: ReactPointerEvent<SVGCircleElement>,
   ) => {
-    if (disabled) return
+    if (disabled || drawingPoints !== null) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     setDragTarget({ type: 'calibration', endpoint })
@@ -726,10 +747,130 @@ export function FloorPlanAnnotationWorkbench({
   }
 
   const resetAnnotation = () => {
+    setDrawingPoints(null)
+    setGeometryReviewed(false)
     setWorkingDraft(cloneDraft(draft))
     setSelectedRoomId(draft.rooms[0]?.id ?? '')
     recordEdit('resets')
     setAnnotationError(null)
+  }
+
+  const startBlankAnnotation = () => {
+    if (!sourceImage || disabled) return
+    const caseId = blankCaseId.trim()
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(caseId)) {
+      setAnnotationError('请先输入匿名 Case ID（小写字母、数字、短横线或下划线）')
+      return
+    }
+    if (!window.confirm('将清空当前 Room / Opening，并从已上传的原图开始标注。确定继续？')) return
+    const { widthPx, heightPx } = sourceImage
+    setWorkingDraft((current) => ({
+      ...current,
+      source: { kind: 'floorplan_image', sourceLabel: caseId, widthPx, heightPx },
+      calibration: {
+        startPx: [Math.min(10, widthPx / 4), Math.max(0, heightPx - 10)],
+        endPx: [Math.min(widthPx, 110), Math.max(0, heightPx - 10)],
+        realDistanceMeters: 0,
+      },
+      assumptions: {
+        ...current.assumptions,
+        wallThicknessConfirmed: false,
+        ceilingHeightConfirmed: false,
+      },
+      rooms: [],
+      openings: [],
+    }))
+    setSelectedRoomId('')
+    setDrawingPoints(null)
+    setGeometryReviewed(false)
+    setTouchedRoomIds(new Set<string>())
+    recordEdit('resets')
+    setAnnotationError('已开始空白标注：请逐房间描边，核对尺寸、墙厚和层高')
+  }
+
+  const finishDrawingRoom = () => {
+    if (!drawingPoints) return
+    const points = [...drawingPoints]
+    if (points.length >= 2 && pointDistance(points[0]!, points[points.length - 1]!) < 3) {
+      points.pop()
+    }
+    if (points.length < 3 ||
+        Math.abs(polygonSignedArea(points)) <= 1 ||
+        polygonHasSelfIntersection(points) ||
+        points.some((p, index) => pointDistance(p, points[(index + 1) % points.length]!) <= 1)) {
+      setAnnotationError('房间多边形无效：至少 3 个不重复的顶点，不能自交或面积为 0')
+      return
+    }
+    const ids = new Set([
+      ...workingDraft.rooms.map((room) => room.id),
+      ...workingDraft.openings.map((opening) => opening.id),
+    ])
+    let sequence = 1
+    while (ids.has('manual-room-' + sequence)) sequence += 1
+    const id = 'manual-room-' + sequence
+    setWorkingDraft((current) => ({
+      ...current,
+      rooms: [...current.rooms, {
+        id,
+        name: '待命名房间-' + sequence,
+        boundaryPx: points,
+      }],
+    }))
+    setSelectedRoomId(id)
+    setDrawingPoints(null)
+    setGeometryReviewed(false)
+    recordEdit('roomStructureEdits', id)
+    setAnnotationError(null)
+  }
+
+  const removeSelectedRoom = () => {
+    if (!selectedRoom || disabled || !window.confirm('删除房间及其所有 Opening？')) return
+    const id = selectedRoom.id
+    setWorkingDraft((current) => ({
+      ...current,
+      rooms: current.rooms.filter((room) => room.id !== id),
+      openings: current.openings.filter((opening) => opening.roomId !== id),
+    }))
+    setSelectedRoomId(workingDraft.rooms.find((room) => room.id !== id)?.id ?? '')
+    setGeometryReviewed(false)
+    recordEdit('roomStructureEdits', id)
+  }
+
+  const addOpeningToSelectedRoom = () => {
+    if (!selectedRoom || selectedRoom.boundaryPx.length < 2 || disabled) return
+    const a = selectedRoom.boundaryPx[0]!
+    const b = selectedRoom.boundaryPx[1]!
+    const length = pointDistance(a, b)
+    if (length <= 2) return
+    const widthPx = Math.min(60, length / 3)
+    const ids = new Set(workingDraft.openings.map((opening) => opening.id))
+    let sequence = 1
+    while (ids.has('manual-opening-' + sequence)) sequence += 1
+    setWorkingDraft((current) => ({
+      ...current,
+      openings: [...current.openings, {
+        id: 'manual-opening-' + sequence,
+        roomId: selectedRoom.id,
+        edgeIndex: 0,
+        kind: 'door',
+        offsetPx: (length - widthPx) / 2,
+        widthPx,
+        heightMeters: 2.1,
+      }],
+    }))
+    setGeometryReviewed(false)
+    recordEdit('openingGeometryEdits', selectedRoom.id)
+    setAnnotationError('新增 Opening 的边、宽度及高度只是占位，请人工逐项校正')
+  }
+
+  const deleteOpening = (openingId: string) => {
+    if (disabled || !window.confirm('删除此 Opening？')) return
+    setWorkingDraft((current) => ({
+      ...current,
+      openings: current.openings.filter((opening) => opening.id !== openingId),
+    }))
+    setGeometryReviewed(false)
+    recordEdit('openingGeometryEdits', selectedRoomId)
   }
 
   const applyAnnotation = async () => {
@@ -782,7 +923,8 @@ export function FloorPlanAnnotationWorkbench({
         counts.openingGeometryEdits +
         counts.calibrationEdits +
         counts.assumptionEdits +
-        counts.resets,
+        counts.resets +
+        (counts.roomStructureEdits ?? 0),
       editCounts: counts,
       touchedRoomIds: [...touchedRoomIds].sort(),
       roomCount: workingDraft.rooms.length,
@@ -864,6 +1006,31 @@ export function FloorPlanAnnotationWorkbench({
         </div>
       </div>
 
+      <div className="floorplan-manual-toolbar">
+        <label>
+          匿名 Case ID
+          <input value={blankCaseId} disabled={disabled} placeholder="case-001"
+            onChange={(event) => setBlankCaseId(event.target.value)} />
+        </label>
+        <button type="button" disabled={disabled || !sourceImage} onClick={startBlankAnnotation}>
+          从原图开始空白标注
+        </button>
+        {drawingPoints === null ? (
+          <button type="button" disabled={disabled || !sourceImage || !aspectRatioCompatible}
+            onClick={() => { setDrawingPoints([]); setGeometryReviewed(false); setAnnotationError(null) }}>
+            绘制新房间
+          </button>
+        ) : (
+          <>
+            <span>已放置 {drawingPoints.length} 个顶点（逐点点击原图）</span>
+            <button type="button" disabled={disabled || drawingPoints.length < 3} onClick={finishDrawingRoom}>完成房间</button>
+            <button type="button" disabled={disabled || drawingPoints.length === 0}
+              onClick={() => setDrawingPoints((points) => points?.slice(0, -1) ?? null)}>撤销顶点</button>
+            <button type="button" disabled={disabled} onClick={() => setDrawingPoints(null)}>取消绘制</button>
+          </>
+        )}
+      </div>
+
       <div className="floorplan-annotation-layout">
         <div className="floorplan-annotation-canvas-shell">
           <div className="floorplan-overlay-toolbar">
@@ -901,6 +1068,14 @@ export function FloorPlanAnnotationWorkbench({
             ref={svgRef}
             className="floorplan-annotation-canvas"
             viewBox={viewBox}
+            onPointerDown={(event) => {
+              if (disabled || drawingPoints === null || event.button !== 0 ||
+                  !sourceImage || !aspectRatioCompatible) return
+              const point = pointFromPointer(event)
+              if (!point) return
+              setDrawingPoints((current) => current === null ? null :
+                [...current, [Math.round(point[0] * 100) / 100, Math.round(point[1] * 100) / 100]])
+            }}
             onPointerMove={moveDrag}
             onPointerUp={stopDrag}
             onPointerCancel={stopDrag}
@@ -964,6 +1139,20 @@ export function FloorPlanAnnotationWorkbench({
                 </g>
               )
             })}
+
+            {drawingPoints !== null && drawingPoints.length > 0 ? (
+              <g pointerEvents="none">
+                <polyline
+                  className="floorplan-drawing-line"
+                  fill="none"
+                  points={drawingPoints.map((point) => point.join(',')).join(' ')}
+                />
+                {drawingPoints.map((point, index) => (
+                  <circle key={index} className="floorplan-drawing-point"
+                    cx={point[0]} cy={point[1]} r="5" />
+                ))}
+              </g>
+            ) : null}
 
             {workingDraft.openings.map((opening) => {
               const room = workingDraft.rooms.find(
@@ -1042,6 +1231,12 @@ export function FloorPlanAnnotationWorkbench({
 
           {selectedRoom ? (
             <>
+              <div className="floorplan-manual-actions">
+                <button type="button" disabled={disabled || drawingPoints !== null}
+                  onClick={removeSelectedRoom}>删除当前房间及其 Opening</button>
+                <button type="button" disabled={disabled || drawingPoints !== null}
+                  onClick={addOpeningToSelectedRoom}>新增 Opening（需复核）</button>
+              </div>
               <label>
                 房间名称
                 <input
@@ -1106,6 +1301,20 @@ export function FloorPlanAnnotationWorkbench({
                       key={opening.id}
                     >
                       <code>{opening.id}</code>
+                      <button type="button" disabled={disabled}
+                        onClick={() => deleteOpening(opening.id)}>删除 Opening</button>
+                      <label>
+                        Edge Index
+                        <select value={opening.edgeIndex} disabled={disabled}
+                          onChange={(event) => {
+                            const edgeIndex = Number(event.target.value)
+                            updateOpening(opening.id, (current) => ({ ...current, edgeIndex, offsetPx: 0 }))
+                            recordEdit('openingGeometryEdits', selectedRoom.id)
+                          }}>
+                          {selectedRoom.boundaryPx.map((_, index) =>
+                            <option key={index} value={index}>{index}</option>)}
+                        </select>
+                      </label>
                       <label>
                         Kind
                         <select
@@ -1295,6 +1504,11 @@ export function FloorPlanAnnotationWorkbench({
             </label>
           </div>
 
+          <label className="floorplan-check">
+            <input type="checkbox" checked={geometryReviewed} disabled={disabled || drawingPoints !== null}
+              onChange={(event) => setGeometryReviewed(event.target.checked)} />
+            已人工核对全部 Room 边界、Opening、真实尺寸及空间类型
+          </label>
           <div
             className={
               groundTruthIssues.length === 0

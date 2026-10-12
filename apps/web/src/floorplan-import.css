@@ -581,3 +581,49 @@
     margin-left: 0;
   }
 }
+
+/* PR #17: blank-source polygon authoring and explicit human GT review. */
+.floorplan-manual-toolbar,
+.floorplan-manual-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.floorplan-manual-toolbar label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+}
+.floorplan-manual-toolbar input {
+  min-width: 120px;
+  padding: 7px;
+  border: 1px solid #c1bbaf;
+  background: #fffdf8;
+}
+.floorplan-manual-toolbar button,
+.floorplan-manual-actions button,
+.floorplan-opening-row button {
+  padding: 7px 10px;
+  border: 1px solid #bdb6aa;
+  background: #f6f2ea;
+  cursor: pointer;
+}
+.floorplan-manual-toolbar button:disabled,
+.floorplan-manual-actions button:disabled,
+.floorplan-opening-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.floorplan-drawing-line {
+  stroke: #c16a23;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 6 4;
+}
+.floorplan-drawing-point {
+  fill: #fff;
+  stroke: #c16a23;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}

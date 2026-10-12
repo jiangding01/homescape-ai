@@ -10,6 +10,7 @@ export type FloorPlanReviewEditKind =
 
 export interface FloorPlanReviewEditCounts {
   roomVertexMoves: number
+  roomStructureEdits?: number
   roomMetadataEdits: number
   openingGeometryEdits: number
   calibrationEdits: number

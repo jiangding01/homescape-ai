@@ -29,6 +29,7 @@ const TAG_VALUES = {
 
 const EDIT_KEYS = [
   'roomVertexMoves',
+  'roomStructureEdits',
   'roomMetadataEdits',
   'openingGeometryEdits',
   'calibrationEdits',
@@ -687,7 +688,7 @@ function validateReviewBurden(value, label) {
 
   for (const key of EDIT_KEYS) {
     const value = nonNegativeInteger(
-      editCounts[key],
+      key === 'roomStructureEdits' && editCounts[key] === undefined ? 0 : editCounts[key],
       label + '.editCounts.' + key,
     )
     normalizedCounts[key] = value
