@@ -15,7 +15,7 @@ import {
   type ChangeEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { clickNearStart, clampViewport, fullViewport, orthogonalEdge, orthogonalPoint, zoomViewport, type AnnotationViewport } from './floorplan-annotation-geometry'
+import { clickNearStart, clampViewport, fullViewport, insertPolygonVertex, orthogonalEdge, orthogonalPoint, removePolygonVertex, zoomViewport, type AnnotationViewport } from './floorplan-annotation-geometry'
 
 const roomTypeOptions: Array<{ value: RoomType; label: string }> = [
   { value: 'living', label: '客厅' },
@@ -453,6 +453,10 @@ export function FloorPlanAnnotationWorkbench({
   const [focusMode, setFocusMode] = useState(false)
   const [orthogonalMode, setOrthogonalMode] = useState(true)
   const [panMode, setPanMode] = useState(false)
+  const [optionHeld, setOptionHeld] = useState(false)
+  const [canvasHovered, setCanvasHovered] = useState(false)
+  const [selectedVertexIndex, setSelectedVertexIndex] = useState<number | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [viewport, setViewport] = useState<AnnotationViewport | null>(null)
   const [cursorPoint, setCursorPoint] = useState<PixelPoint | null>(null)
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(
@@ -479,6 +483,8 @@ export function FloorPlanAnnotationWorkbench({
     setGeometryReviewed(false)
     setViewport(null)
     setPanMode(false)
+    setOptionHeld(false)
+    setSelectedVertexIndex(null)
     setCursorPoint(null)
     setBlankCaseId('')
     setEditCounts(initialEditCounts)
@@ -702,18 +708,56 @@ export function FloorPlanAnnotationWorkbench({
   const sourceHeight = workingDraft.source.heightPx
   const visibleView = viewport ?? fullViewport(sourceWidth, sourceHeight)
   const zoom = sourceWidth / visibleView.width
+  const isPanning = panMode || optionHeld
   const zoomBy = (factor: number) => setViewport((old) =>
     zoomViewport(old ?? fullViewport(sourceWidth, sourceHeight), factor, sourceWidth, sourceHeight))
+
+  useEffect(() => {
+    const isEditable = (target: EventTarget | null) =>
+      target instanceof HTMLElement && (
+        target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+      )
+    const onDown = (event: KeyboardEvent) => {
+      if (event.key === 'Alt') {
+        if (!isEditable(event.target)) setOptionHeld(true)
+        return
+      }
+      if (disabled || (!canvasHovered && !focusMode) || isEditable(event.target) ||
+          event.metaKey || event.ctrlKey || event.altKey) return
+      if (event.key === '[' || event.key === ']' || event.key === '0') {
+        event.preventDefault()
+        if (event.key === '0') setViewport(null)
+        else setViewport((current) => zoomViewport(
+          current ?? fullViewport(sourceWidth, sourceHeight),
+          event.key === ']' ? 1.5 : 1 / 1.5,
+          sourceWidth, sourceHeight,
+        ))
+      }
+    }
+    const onUp = (event: KeyboardEvent) => {
+      if (event.key === 'Alt') setOptionHeld(false)
+    }
+    const onBlur = () => setOptionHeld(false)
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('keydown', onDown)
+      window.removeEventListener('keyup', onUp)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [canvasHovered, focusMode, disabled, sourceWidth, sourceHeight])
 
   const startRoomDrag = (
     roomId: string,
     pointIndex: number,
     event: ReactPointerEvent<SVGCircleElement>,
   ) => {
-    if (disabled || drawingPoints !== null || panMode) return
+    if (disabled || drawingPoints !== null || isPanning) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     setSelectedRoomId(roomId)
+    setSelectedVertexIndex(pointIndex)
     setDragTarget({
       type: 'room_vertex',
       roomId,
@@ -726,7 +770,7 @@ export function FloorPlanAnnotationWorkbench({
     endpoint: 'start' | 'end',
     event: ReactPointerEvent<SVGCircleElement>,
   ) => {
-    if (disabled || drawingPoints !== null || panMode) return
+    if (disabled || drawingPoints !== null || isPanning) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     setDragTarget({ type: 'calibration', endpoint })
@@ -867,6 +911,35 @@ export function FloorPlanAnnotationWorkbench({
     setAnnotationError(null)
   }
 
+  const editSelectedVertex = (action: 'delete' | 'insert') => {
+    if (!selectedRoom || selectedVertexIndex === null || disabled || drawingPoints !== null) return
+    try {
+      const result = action === 'delete'
+        ? removePolygonVertex(selectedRoom, workingDraft.openings, selectedVertexIndex)
+        : insertPolygonVertex(selectedRoom, workingDraft.openings, selectedVertexIndex)
+      const points = result.room.boundaryPx
+      if (points.some((point, index) =>
+        pointDistance(point, points[(index + 1) % points.length]!) <= 1) ||
+          Math.abs(polygonSignedArea(points)) <= 1 || polygonHasSelfIntersection(points)) {
+        setAnnotationError('操作将产生零长度边或无效多边形，请先调整顶点位置')
+        return
+      }
+      setWorkingDraft((current) => ({
+        ...current,
+        rooms: current.rooms.map((room) => room.id === selectedRoom.id ? result.room : room),
+        openings: result.openings,
+      }))
+      setGeometryReviewed(false)
+      recordEdit('roomStructureEdits', selectedRoom.id)
+      setSelectedVertexIndex(action === 'delete'
+        ? Math.min(selectedVertexIndex, points.length - 1)
+        : selectedVertexIndex + 1)
+      setAnnotationError(null)
+    } catch (error) {
+      setAnnotationError(error instanceof Error ? error.message : '顶点修改失败')
+    }
+  }
+
   const removeSelectedRoom = () => {
     if (!selectedRoom || disabled || !window.confirm('删除房间及其所有 Opening？')) return
     const id = selectedRoom.id
@@ -876,6 +949,7 @@ export function FloorPlanAnnotationWorkbench({
       openings: current.openings.filter((opening) => opening.roomId !== id),
     }))
     setSelectedRoomId(workingDraft.rooms.find((room) => room.id !== id)?.id ?? '')
+    setSelectedVertexIndex(null)
     setGeometryReviewed(false)
     recordEdit('roomStructureEdits', id)
   }
@@ -1014,7 +1088,7 @@ export function FloorPlanAnnotationWorkbench({
   const viewBox = [visibleView.x, visibleView.y, visibleView.width, visibleView.height].join(' ')
 
   return (
-    <div className={focusMode ? 'floorplan-annotation is-focused' : 'floorplan-annotation'}>
+    <div className={['floorplan-annotation', focusMode ? 'is-focused' : '', focusMode && sidebarCollapsed ? 'sidebar-collapsed' : ''].filter(Boolean).join(' ')}>
       <div className="floorplan-annotation-head">
         <div>
           <strong>Ground Truth Annotation</strong>
@@ -1106,6 +1180,12 @@ export function FloorPlanAnnotationWorkbench({
               <button type="button" aria-pressed={panMode} onClick={() => setPanMode((v) => !v)}>
                 {panMode ? '停止平移' : '平移画布'}
               </button>
+              {focusMode ? (
+                <button type="button" onClick={() => setSidebarCollapsed((v) => !v)}>
+                  {sidebarCollapsed ? '展开右侧面板' : '收起右侧面板'}
+                </button>
+              ) : null}
+              <span className="floorplan-shortcut-tip">按住 Option 平移 · [ / ] 缩放 · 0 适应</span>
             </div>
             <label>
               Overlay
@@ -1124,12 +1204,12 @@ export function FloorPlanAnnotationWorkbench({
 
           <svg
             ref={svgRef}
-            className={panMode ? 'floorplan-annotation-canvas is-panning' : 'floorplan-annotation-canvas'}
+            className={isPanning ? 'floorplan-annotation-canvas is-panning' : 'floorplan-annotation-canvas'}
             viewBox={viewBox}
             style={{ aspectRatio: `${sourceWidth} / ${sourceHeight}` }}
             onPointerDown={(event) => {
               if (disabled || event.button !== 0) return
-              if (panMode) {
+              if (isPanning) {
                 if (zoom <= 1) return
                 event.currentTarget.setPointerCapture(event.pointerId)
                 panStart.current = { x: event.clientX, y: event.clientY, view: visibleView }
@@ -1153,7 +1233,12 @@ export function FloorPlanAnnotationWorkbench({
             onPointerMove={moveDrag}
             onPointerUp={stopDrag}
             onPointerCancel={stopDrag}
-            onPointerLeave={() => { if (!panStart.current) stopDrag(); setCursorPoint(null) }}
+            onPointerEnter={() => setCanvasHovered(true)}
+            onPointerLeave={() => {
+              setCanvasHovered(false)
+              if (!panStart.current) stopDrag()
+              setCursorPoint(null)
+            }
             role="img"
             aria-label="户型 Ground Truth 几何校正画布"
           >
@@ -1185,7 +1270,9 @@ export function FloorPlanAnnotationWorkbench({
                         : 'floorplan-annotation-room'
                     }
                     points={points}
-                    onPointerDown={() => { if (!panMode) setSelectedRoomId(room.id) }}
+                    onPointerDown={() => {
+                      if (!isPanning) { setSelectedRoomId(room.id); setSelectedVertexIndex(null) }
+                    }}
                   />
                   <text
                     className="floorplan-annotation-label"
@@ -1198,9 +1285,9 @@ export function FloorPlanAnnotationWorkbench({
                     <circle
                       key={room.id + '-' + pointIndex}
                       className={
-                        selected
-                          ? 'floorplan-vertex selected'
-                          : 'floorplan-vertex'
+                        selected && selectedVertexIndex === pointIndex
+                          ? 'floorplan-vertex active'
+                          : selected ? 'floorplan-vertex selected' : 'floorplan-vertex'
                       }
                       cx={point[0]}
                       cy={point[1]}
@@ -1301,7 +1388,7 @@ export function FloorPlanAnnotationWorkbench({
             <select
               value={selectedRoomId}
               disabled={disabled}
-              onChange={(event) => setSelectedRoomId(event.target.value)}
+              onChange={(event) => { setSelectedRoomId(event.target.value); setSelectedVertexIndex(null) }}
             >
               {workingDraft.rooms.map((room) => (
                 <option key={room.id} value={room.id}>
@@ -1313,6 +1400,19 @@ export function FloorPlanAnnotationWorkbench({
 
           {selectedRoom ? (
             <>
+              <div className="floorplan-vertex-editor">
+                <strong>房间顶点编辑</strong>
+                <span>{selectedVertexIndex === null
+                  ? '点击或拖动顶点以选中'
+                  : `第 ${selectedVertexIndex + 1} / ${selectedRoom.boundaryPx.length} 个顶点`}</span>
+                <div className="floorplan-manual-actions">
+                  <button type="button" disabled={disabled || drawingPoints !== null || selectedVertexIndex === null}
+                    onClick={() => editSelectedVertex('insert')}>在选中点后插入中点</button>
+                  <button type="button" disabled={disabled || drawingPoints !== null ||
+                    selectedVertexIndex === null || selectedRoom.boundaryPx.length <= 3}
+                    onClick={() => editSelectedVertex('delete')}>删除选中顶点</button>
+                </div>
+              </div>
               <div className="floorplan-manual-actions">
                 <button type="button" disabled={disabled || drawingPoints !== null}
                   onClick={removeSelectedRoom}>删除当前房间及其 Opening</button>
