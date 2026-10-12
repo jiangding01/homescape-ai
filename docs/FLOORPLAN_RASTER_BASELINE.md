@@ -286,6 +286,20 @@ pnpm floorplan:pilot -- \
   --report .floorplan-corpus/reports/pilot-raster.json
 ~~~
 
+## Raster Batch 安全与失败边界
+
+PR #17 的 Batch 在执行 Corpus Gate 和 Raster Extractor 前进行全量 Preflight：
+
+- 检查所有 Case Source 位于 Corpus 根目录内，并匹配 PNG / JPEG 扩展名；
+- 对全部 Candidate、Metadata、报告、Manifest 输出路径进行根目录边界检查；
+- 检查输出位置已有的符号链接，禁止输出目录越界与文件符号链接写入；
+- 拒绝不同输出角色共用同一文件路径，以及大小写差异引起的跨平台路径冲突；
+- 如果后续 Case 在 Preflight 阶段就无效，本轮不会先生成前面 Case 的 Candidate。
+
+CI 中的 `floorplan:raster:batch:check-demo` 覆盖路径逃逸、输出文件符号链接、输出路径冲突及后续 Case 扩展名错误。
+
+**边界说明：** Preflight 是写入前的快速验证，不构成整个批次的原子事务。Raster Extraction 在运行期间报错时，可能留下已经生成的部分 Candidate / Metadata；不得把未完成批次当作最终 Benchmark 输入。真实 Pilot 仍需确认完整 Batch Report 与所有 Case 产物。
+
 ## 下一步
 
 PR #17 使用真实 10 Case 跑：
