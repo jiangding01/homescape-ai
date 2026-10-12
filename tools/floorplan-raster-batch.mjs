@@ -414,6 +414,7 @@ async function main() {
     ['corpus-report', corpusReportPath],
     ['report', reportPath],
     ['benchmark-manifest', benchmarkManifestPath],
+    ['benchmark-report', benchmarkReportPath],
     ['experiment-manifest', experimentManifestPath],
     ...manifest.cases.flatMap((corpusCase) => [
       [
@@ -440,9 +441,6 @@ async function main() {
     seenWritablePaths.set(identity, label)
     await assertSafeOutputPath(root, absolutePath, label)
   }
-  assertOutputWithinRoot(root, benchmarkReportPath, 'benchmark-report')
-  await assertSafeOutputPath(root, benchmarkReportPath, 'benchmark-report')
-
   const preparedCases = []
   for (const [index, corpusCase] of manifest.cases.entries()) {
     const sourcePath = await resolveWithinRoot(
@@ -455,7 +453,7 @@ async function main() {
       corpusCase.mediaType,
       'cases[' + index + ']',
     )
-    preparedCases.push({ ...corpusCase, sourcePath })
+    preparedCases.push({ ...corpusCase, resolvedSourcePath: sourcePath })
   }
 
   await mkdir(dirname(corpusReportPath), { recursive: true })
@@ -499,7 +497,7 @@ async function main() {
   const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
 
   for (const corpusCase of preparedCases) {
-    const sourcePath = corpusCase.sourcePath
+    const sourcePath = corpusCase.resolvedSourcePath
 
     const candidatePath = resolve(
       candidateRoot,
