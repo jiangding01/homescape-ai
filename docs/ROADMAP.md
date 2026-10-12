@@ -365,3 +365,6 @@ PR #16 已把 PNG / JPEG 像素接入 Geometry Observation，并通过 Synthetic
 ## P4 — Delivery
 
 施工规则、物料、阶段衔接、验收与交付。
+
+
+PR #17 补充进度（2026-10-12）：`case-001` 已获取新版人工 GT 与 Review Burden，原图/GT 保留在私有 Corpus；已备好单 Case 官方 Corpus Gate 输入（正式运行结果仍待核验）。增加了 `floorplan:real:coverage` 将已确认 GT 与 Intake 提取状态按 Source SHA 严格关联，失败 Case 不伪造 Candidate / IoU。后续推进其余代表样本并验证跨风格 Failure Slice；PR #17 仍为 Draft。

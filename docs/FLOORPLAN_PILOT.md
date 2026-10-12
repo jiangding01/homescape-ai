@@ -255,3 +255,21 @@ PR #14 解决的是“如何严谨地跑真实 Pilot 并比较结果”。
 Review Burden Sidecar 本地文件仍保留 sourceLabel，便于标注阶段定位 Case；Pilot Report 在 Join 后会主动移除 sourceLabel，只保留匿名 caseId 和指标。
 
 Extraction Sidecar 中的 sourceId / traceId 也不会复制进 Pilot Report，只保留评测需要的 extractorId、provider、model、latency、token / cost 字段。
+
+## PR #17 · 已确认 Ground Truth 与提取覆盖率（不伪造 Candidate）
+
+首次真实 `case-001` 已有人为确认的 FloorPlanDraft v0.1（7 Room、12 Opening）；原始 Raster Pilot 在该 Case 上报告 `no_orthogonal_outline`，并没有 Candidate。正式 `floorplan:benchmark` 不能将未生成 Candidate 的 Case 转换为零 IoU，也不能静默从样本分母中剔除。
+
+先用原有 `floorplan:corpus` 得到私有真实 `corpus-summary.json`，再将至少一个 Intake Report 与 GT Corpus 进行 Source SHA-256 关联：
+
+```bash
+node tools/floorplan-real-coverage.mjs \
+  .floorplan-corpus/pr17-case001-corpus-preflight/reports/corpus-summary.json \
+  .floorplan-corpus/pilot-a/reports/intake-report.json \
+  --extractor-id raster-orthogonal-v0.1 \
+  --report .floorplan-corpus/pr17-case001-corpus-preflight/reports/coverage.json
+```
+
+输出字段 `groundTruthCaseCount`、`failed`、`generated_unverified`、`not_run`、`failureCounts`。它严格拒绝 source SHA 不匹配、重复 Case、Corpus Case 无 Intake 证据，以及被错误标记为已生成但没有 Candidate 哈希的样本。报告不含原始地址、sourcePath 或 GT 内容，也不计算伪造的 IoU。
+
+该报告只是**Extractor Coverage/Failure Evidence**，`benchmarkStatus=not_evaluated`。已有 Candidate 的 Case 仍须经过正式结构 Benchmark 与 Human Review 才能判定质量。工具不会改变原有 Benchmark Threshold 或 Corpus Gate。

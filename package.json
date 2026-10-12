@@ -30,7 +30,9 @@
     "floorplan:raster:check-demo": "tsx packages/floorplan-extractor/src/node/raster-smoke.ts",
     "floorplan:annotation:check-demo": "tsx tools/floorplan-annotation-interaction-smoke.ts",
     "floorplan:real:intake": "node tools/floorplan-real-intake.mjs",
-    "floorplan:real:intake:check-demo": "node tools/floorplan-real-intake-smoke.mjs"
+    "floorplan:real:intake:check-demo": "node tools/floorplan-real-intake-smoke.mjs",
+    "floorplan:real:coverage": "node tools/floorplan-real-coverage.mjs",
+    "floorplan:real:coverage:check-demo": "node tools/floorplan-real-coverage-smoke.mjs"
   },
   "devDependencies": {
     "@homescape/floorplan-extractor": "workspace:*",

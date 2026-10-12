@@ -57,5 +57,8 @@ jobs:
       - name: Real intake smoke
         run: pnpm floorplan:real:intake:check-demo
 
+      - name: Real extraction coverage smoke
+        run: pnpm floorplan:real:coverage:check-demo
+
       - name: Annotation interaction geometry smoke
         run: pnpm floorplan:annotation:check-demo
