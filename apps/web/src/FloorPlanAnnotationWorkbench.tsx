@@ -1060,8 +1060,8 @@ export function FloorPlanAnnotationWorkbench({
         </button>
         <label className="floorplan-orthogonal-toggle">
           <input type="checkbox" checked={orthogonalMode}
-            disabled={disabled || drawingPoints !== null}
-            onChange={(event) => setOrthogonalMode(event.target.checked)} />
+            disabled={disabled}
+            onChange={(event) => { setOrthogonalMode(event.target.checked); setCursorPoint(null) }} />
           正交绘制（锁定水平/垂直）
         </label>
         {drawingPoints === null ? (

@@ -42,4 +42,4 @@ export const orthogonalEdge = (a: PixelPoint, b: PixelPoint) =>
   Math.abs(a[0] - b[0]) <= 1 || Math.abs(a[1] - b[1]) <= 1
 
 export const clickNearStart = (a: PixelPoint, b: PixelPoint, zoom: number) =>
-  Math.hypot(a[0] - b[0], a[1] - b[1]) <= Math.max(3, 14 / zoom)
+  Math.hypot(a[0] - b[0], a[1] - b[1]) <= Math.max(3, 18 / zoom)
