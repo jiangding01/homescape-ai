@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -43,3 +47,6 @@ jobs:
 
       - name: Raster pilot batch smoke
         run: pnpm floorplan:raster:batch:check-demo
+
+      - name: Real intake smoke
+        run: pnpm floorplan:real:intake:check-demo

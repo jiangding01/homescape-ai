@@ -317,6 +317,9 @@ PR #16 已把 PNG / JPEG 像素接入 Geometry Observation，并通过 Synthetic
 - [x] Raster Batch 输出路径安全检查与重复目标 Gate
 - [x] Raster Batch 全量 Case 输入预检查
 - [x] Raster Batch 错误路径 / 后续 Case 无效的回归 Smoke
+- [x] A/B 两组各 10 张真实候选图完成离线预选（素材不入 Git；非 Ground Truth）
+- [x] 真实素材 Intake Preflight / Source Set Fingerprint / Candidate 预提取 CLI
+- [x] 文件头、尺寸、SHA-256、路径越界与未标注状态 Smoke
 - [ ] 准备第一批 10 张去敏真实户型图
 - [ ] 用 PR #13 Workbench 完成 Ground Truth
 - [ ] 跑 PR #12 Corpus Check 生成真实 datasetFingerprint

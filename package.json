@@ -27,7 +27,9 @@
     "floorplan:raster": "tsx tools/floorplan-raster-extract.ts",
     "floorplan:raster:batch": "node tools/floorplan-raster-batch.mjs",
     "floorplan:raster:batch:check-demo": "node tools/floorplan-raster-batch-smoke.mjs",
-    "floorplan:raster:check-demo": "tsx packages/floorplan-extractor/src/node/raster-smoke.ts"
+    "floorplan:raster:check-demo": "tsx packages/floorplan-extractor/src/node/raster-smoke.ts",
+    "floorplan:real:intake": "node tools/floorplan-real-intake.mjs",
+    "floorplan:real:intake:check-demo": "node tools/floorplan-real-intake-smoke.mjs"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

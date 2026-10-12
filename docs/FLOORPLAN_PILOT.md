@@ -1,5 +1,17 @@
 # Floor Plan Pilot Evaluation
 
+## 真实图片 Intake（Ground Truth 之前）
+
+在 Real 10 Case Pilot 的正式 Corpus Gate 之前，允许使用 `tools/floorplan-real-intake.mjs` 对用户提供的真实 PNG / JPEG 进行 **source-only preflight**。这是独立的预标注入口，不修改现有的 Corpus / Benchmark / Pilot 协议，也不伪造 Ground Truth。
+
+- 逐 Case 验证匿名 ID、文件扩展名、真实格式文件头、图像尺寸、SHA-256、重复源图及 realpath 安全边界；
+- 输出 `sourceSetFingerprint` 与每图来源组别、原图 SHA（如有），不声称是正式 `datasetFingerprint`；
+- `--extract` 可调用现有 `floorplan-raster-extract.ts` 生成未确认 Candidate 与 Metadata，失败单独记录且保持非 0 退出；
+- `benchmarkReady=false`、`groundTruthCaseCount=0`，直到人工确认 GT、正式 Corpus Gate 及 Review 完成；
+- 真实图片和 Intake 报告只保存在 Git 忽略的 `.floorplan-corpus/` 中，不上传公开仓库。
+
+详细命令与边界见 [FLOORPLAN_REAL_INTAKE.md](FLOORPLAN_REAL_INTAKE.md)。
+
 ## 目标
 
 PR #14 把 PR #11 的结构指标、PR #12 的 Corpus Fingerprint、PR #13 的 Human Review Burden 和 Extractor Metadata 合并成一次可回归的 Experiment Report。
