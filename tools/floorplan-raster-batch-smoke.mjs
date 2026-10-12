@@ -8,6 +8,7 @@ import {
   mkdir,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -165,8 +166,100 @@ try {
     fail('dry-run 不应生成 Candidate / Metadata')
   }
 
+  // 错误输出位置必须在任何写入前拒绝：目录符号链接、文件符号链接与别名。
+  const outside = await mkdtemp(join(tmpdir(), 'homescape-raster-escape-'))
+  try {
+    await symlink(outside, join(root, 'escape-link'), 'dir')
+    await writeFile(join(outside, 'sentinel.json'), 'untouched', 'utf8')
+    await symlink(
+      join(outside, 'sentinel.json'),
+      join(root, 'report-link.json'),
+      'file',
+    )
+
+    function expectBatchRejected(args, expected, label) {
+      const result = spawnSync(
+        process.execPath,
+        [
+          'tools/floorplan-raster-batch.mjs',
+          corpusPath,
+          '--min-cases',
+          '2',
+          '--dry-run',
+          ...args,
+        ],
+        { cwd: process.cwd(), encoding: 'utf8' },
+      )
+
+      if (result.error) throw result.error
+      if (result.status === 0 || !result.stderr.includes(expected)) {
+        fail(
+          label +
+            ' 应拒绝，status=' +
+            result.status +
+            '，stderr=' +
+            result.stderr,
+        )
+      }
+    }
+
+    expectBatchRejected(
+      ['--report', join(root, 'escape-link', 'escaped.json')],
+      '越过 Corpus',
+      '输出目录符号链接逃逸',
+    )
+    expectBatchRejected(
+      ['--report', join(root, 'report-link.json')],
+      '输出文件不能是符号链接',
+      '输出文件符号链接',
+    )
+    expectBatchRejected(
+      ['--report', join(root, 'benchmark-raster.json')],
+      '输出路径冲突',
+      '输出路径别名',
+    )
+
+    if ((await exists(join(outside, 'escaped.json'))) ||
+        (await readFile(join(outside, 'sentinel.json'), 'utf8')) !== 'untouched') {
+      fail('被拒绝的输出路径不能修改 Corpus 以外的文件')
+    }
+  } finally {
+    await rm(outside, { recursive: true, force: true })
+  }
+
+  // 第二个 Case 的扩展名错误必须在任何 Candidate 写入前被发现。
+  // 这里故意不加 --dry-run，以验证正常执行模式下的全量输入预检查。
+  await writeFile(join(root, 'sources', 'plan-b.jpg'), 'synthetic-b', 'utf8')
+  const invalidCorpus = structuredClone(corpus)
+  invalidCorpus.cases[1].sourcePath = 'sources/plan-b.jpg'
+  const invalidCorpusPath = join(root, 'invalid-corpus.json')
+  await writeFile(
+    invalidCorpusPath,
+    JSON.stringify(invalidCorpus, null, 2) + '\n',
+    'utf8',
+  )
+
+  const invalidResult = spawnSync(
+    process.execPath,
+    [
+      'tools/floorplan-raster-batch.mjs',
+      invalidCorpusPath,
+      '--min-cases',
+      '2',
+    ],
+    { cwd: process.cwd(), encoding: 'utf8' },
+  )
+  if (
+    invalidResult.error ||
+    invalidResult.status === 0 ||
+    !invalidResult.stderr.includes('文件扩展名不是 .png') ||
+    (await exists(join(root, 'candidates')))
+  ) {
+    fail('后续 Case 无效时不得执行前面 Case 的 Extractor')
+  }
+
   process.stderr.write(
-    'Raster Pilot batch smoke passed · corpus gate + manifests + dry-run\n',
+    'Raster Pilot batch smoke passed · manifests + unsafe paths + full preflight\n',
   )
 } finally {
   await rm(root, { recursive: true, force: true })
