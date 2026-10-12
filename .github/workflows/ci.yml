@@ -60,5 +60,8 @@ jobs:
       - name: Real extraction coverage smoke
         run: pnpm floorplan:real:coverage:check-demo
 
+      - name: Real Ground Truth staging smoke
+        run: pnpm floorplan:gt:stage:check-demo
+
       - name: Annotation interaction geometry smoke
         run: pnpm floorplan:annotation:check-demo

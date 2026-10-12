@@ -273,3 +273,7 @@ node tools/floorplan-real-coverage.mjs \
 输出字段 `groundTruthCaseCount`、`failed`、`generated_unverified`、`not_run`、`failureCounts`。它严格拒绝 source SHA 不匹配、重复 Case、Corpus Case 无 Intake 证据，以及被错误标记为已生成但没有 Candidate 哈希的样本。报告不含原始地址、sourcePath 或 GT 内容，也不计算伪造的 IoU。
 
 该报告只是**Extractor Coverage/Failure Evidence**，`benchmarkStatus=not_evaluated`。已有 Candidate 的 Case 仍须经过正式结构 Benchmark 与 Human Review 才能判定质量。工具不会改变原有 Benchmark Threshold 或 Corpus Gate。
+
+## 四个代表 Case 的分阶段 Ground Truth
+
+用 [FLOORPLAN_REAL_GT_STAGING.md](FLOORPLAN_REAL_GT_STAGING.md) 的 stage.json 显式批准 GT；私有文件只留在 .floorplan-corpus。Stage 生成只含已确认 Case 的 Corpus Manifest，并通过原有 Corpus Gate 和 Coverage 工具复核，避免将未生成的 Candidate 转换为零 IoU。case-001 已正式验证；case-004、case-b005、case-b008 仍需人工审核。

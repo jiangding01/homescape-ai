@@ -32,7 +32,9 @@
     "floorplan:real:intake": "node tools/floorplan-real-intake.mjs",
     "floorplan:real:intake:check-demo": "node tools/floorplan-real-intake-smoke.mjs",
     "floorplan:real:coverage": "node tools/floorplan-real-coverage.mjs",
-    "floorplan:real:coverage:check-demo": "node tools/floorplan-real-coverage-smoke.mjs"
+    "floorplan:real:coverage:check-demo": "node tools/floorplan-real-coverage-smoke.mjs",
+    "floorplan:gt:stage": "node tools/floorplan-gt-stage.mjs",
+    "floorplan:gt:stage:check-demo": "node tools/floorplan-gt-stage-smoke.mjs"
   },
   "devDependencies": {
     "@homescape/floorplan-extractor": "workspace:*",
