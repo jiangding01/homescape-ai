@@ -194,3 +194,11 @@ Review Burden Sidecar 不记录本地原图文件名，只保留 Source 尺寸�
 5. `roomStructureEdits` 记录新增或删除 Room 的次数；既有 Review Burden 允许该字段缺失，按 0 统计。此字段不会让手工生成的 Ground Truth 冒充自动 Candidate。
 
 注意：PR #17 的手工标注能力并不能自动判断房间边界。原图、私有 Ground Truth 及任何带真实楼盘信息的素材都保留在 `.floorplan-corpus`，不能提交公开仓库。
+
+### 未知墙厚 / 层高的诚实标注
+
+对真实户型图片，墙厚与层高通常无法从平面图独立确认。Workbench 现在允许在人工完成空间几何复核后将 `wallThicknessConfirmed` / `ceilingHeightConfirmed` 保持为 `false`，不会为了通过 Gate 而冒充确认。数值仍是 Draft 的临时假设；后续若取得可靠建筑数据再标记 confirmed=true。**Calibration 则必须有实际的已知尺寸线；未知比例尺时仍不得导出正式 GT。**
+
+图纸中无法归入室内类型的室外花园暂记为 `type: other` + `name: 花园`，并在内部审核记录说明室外语义。正式室外 Zone Contract 待后续单独设计，不能强行标成客厅或阳台。
+
+从空白原图手工建立 GT 的耗时属于**GT 创建工作量**，不代表某个 Extractor 的 Candidate 修正成本；不能把这种 Sidecar 混入 Extractor Review Burden 均值，否则会污染模型比较。

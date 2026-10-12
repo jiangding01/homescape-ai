@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process'
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import process from 'node:process'
 
 function fail(message) {
@@ -99,3 +102,42 @@ if (
 process.stderr.write(
   'Floor Plan Pilot failure slice smoke passed · aggregate + tag slices\n',
 )
+
+// 新增 roomStructureEdits 必须兼容旧的 review 文件，且不能绕开 totalEdits 校验。
+const temp = await mkdtemp(join(tmpdir(), 'homescape-review-structure-'))
+try {
+  const fixture = join(temp, 'floorplan-pilot')
+  await cp('tools/fixtures/floorplan-pilot', fixture, { recursive: true })
+  const reviewPath = join(fixture, 'review', 'plan-a.reference.json')
+  const original = JSON.parse(await readFile(reviewPath, 'utf8'))
+  const updated = structuredClone(original)
+  updated.editCounts.roomStructureEdits = 2
+  updated.totalEdits += 2
+  await writeFile(reviewPath, JSON.stringify(updated), 'utf8')
+  const runFixture = () => spawnSync(process.execPath, [
+    'tools/floorplan-pilot.mjs',
+    join(fixture, 'experiment.json'),
+    '--min-cases', '2',
+    '--require-corpus-coverage',
+    '--require-complete-review',
+    '--require-complete-metadata',
+  ], { cwd: process.cwd(), encoding: 'utf8' })
+  const compatible = runFixture()
+  if (compatible.status !== 0) fail('新增房间结构编辑计数应通过 Pilot Review：' + compatible.stderr)
+  const aggregation = JSON.parse(compatible.stdout)
+  if (!aggregation.extractors.some((extractor) =>
+    extractor.review?.meanEditCounts?.roomStructureEdits > 0)) {
+    if (!compatible.stdout.includes('"roomStructureEdits"')) {
+      fail('Pilot Report 未聚合房间结构编辑数')
+    }
+  }
+
+  updated.totalEdits -= 1
+  await writeFile(reviewPath, JSON.stringify(updated), 'utf8')
+  const invalid = runFixture()
+  if (invalid.status === 0 || !invalid.stderr.includes('totalEdits 与 editCounts')) {
+    fail('Pilot 必须拒绝新增字段使 totalEdits 不相等')
+  }
+} finally {
+  await rm(temp, { recursive: true, force: true })
+}

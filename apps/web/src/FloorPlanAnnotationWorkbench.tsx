@@ -235,14 +235,8 @@ function getDraftIssues(draft: FloorPlanDraft) {
     issues.push('层高必须大于 0')
   }
 
-  if (!draft.assumptions.wallThicknessConfirmed) {
-    issues.push('墙厚尚未人工确认')
-  }
-
-  if (!draft.assumptions.ceilingHeightConfirmed) {
-    issues.push('层高尚未人工确认')
-  }
-
+  // GT 可以包含未知墙厚 / 层高，必须保留 confirmed=false。
+  // 不得因为 Ground Truth Gate 要求而让标注者虚构真实尺寸。
   if (draft.rooms.length === 0) {
     issues.push('Ground Truth 至少需要一个已标注的 Room')
   }
@@ -600,6 +594,7 @@ export function FloorPlanAnnotationWorkbench({
     }
 
     setStartedAt((current) => current ?? Date.now())
+    setGeometryReviewed(false)
     setSourceImage({
       url: '/floorplan-demo.svg',
       widthPx: 1080,
@@ -636,6 +631,7 @@ export function FloorPlanAnnotationWorkbench({
         return
       }
       setStartedAt((current) => current ?? Date.now())
+      setGeometryReviewed(false)
       setSourceImage((current) => {
         if (current?.objectUrl) {
           URL.revokeObjectURL(current.url)
@@ -664,6 +660,7 @@ export function FloorPlanAnnotationWorkbench({
 
   const clearSource = () => {
     sourceLoadSequenceRef.current += 1
+    setGeometryReviewed(false)
     setSourceImage(null)
     setAnnotationError(null)
   }
@@ -721,6 +718,7 @@ export function FloorPlanAnnotationWorkbench({
 
     const point = pointFromPointer(event)
     if (!point) return
+    setGeometryReviewed(false)
 
     if (dragTarget.type === 'room_vertex') {
       updateRoom(dragTarget.roomId, (room) => ({
@@ -1073,6 +1071,7 @@ export function FloorPlanAnnotationWorkbench({
                   !sourceImage || !aspectRatioCompatible) return
               const point = pointFromPointer(event)
               if (!point) return
+              event.preventDefault()
               setDrawingPoints((current) => current === null ? null :
                 [...current, [Math.round(point[0] * 100) / 100, Math.round(point[1] * 100) / 100]])
             }}
@@ -1403,6 +1402,7 @@ export function FloorPlanAnnotationWorkbench({
                 disabled={disabled}
                 onChange={(event) => {
                   const value = Number(event.target.value)
+                  setGeometryReviewed(false)
                   setWorkingDraft((current) => ({
                     ...current,
                     calibration: {
@@ -1428,6 +1428,7 @@ export function FloorPlanAnnotationWorkbench({
                 disabled={disabled}
                 onChange={(event) => {
                   const value = Number(event.target.value)
+                  setGeometryReviewed(false)
                   setWorkingDraft((current) => ({
                     ...current,
                     assumptions: {
@@ -1448,6 +1449,7 @@ export function FloorPlanAnnotationWorkbench({
                 disabled={disabled}
                 onChange={(event) => {
                   const checked = event.target.checked
+                  setGeometryReviewed(false)
                   setWorkingDraft((current) => ({
                     ...current,
                     assumptions: {
@@ -1470,6 +1472,7 @@ export function FloorPlanAnnotationWorkbench({
                 disabled={disabled}
                 onChange={(event) => {
                   const value = Number(event.target.value)
+                  setGeometryReviewed(false)
                   setWorkingDraft((current) => ({
                     ...current,
                     assumptions: {
@@ -1490,6 +1493,7 @@ export function FloorPlanAnnotationWorkbench({
                 disabled={disabled}
                 onChange={(event) => {
                   const checked = event.target.checked
+                  setGeometryReviewed(false)
                   setWorkingDraft((current) => ({
                     ...current,
                     assumptions: {
@@ -1507,7 +1511,7 @@ export function FloorPlanAnnotationWorkbench({
           <label className="floorplan-check">
             <input type="checkbox" checked={geometryReviewed} disabled={disabled || drawingPoints !== null}
               onChange={(event) => setGeometryReviewed(event.target.checked)} />
-            已人工核对全部 Room 边界、Opening、真实尺寸及空间类型
+            已人工核对 Room / Opening / 比例尺；未知墙厚或层高请保持「未确认」
           </label>
           <div
             className={

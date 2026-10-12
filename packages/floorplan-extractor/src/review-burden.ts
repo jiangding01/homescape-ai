@@ -2,6 +2,7 @@ import type { FloorPlanDraftSourceKind } from '@homescape/spatial-model'
 
 export type FloorPlanReviewEditKind =
   | 'room_vertex_move'
+  | 'room_structure'
   | 'room_metadata'
   | 'opening_geometry'
   | 'calibration'
