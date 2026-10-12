@@ -128,6 +128,8 @@ try {
   if (
     benchmark.dataset !== corpus.dataset ||
     benchmark.cases.length !== 2 ||
+    benchmark.cases[0]?.sourcePath !== 'sources/plan-a.png' ||
+    benchmark.cases[1]?.sourcePath !== 'sources/plan-b.png' ||
     benchmark.cases[0]?.candidates[0]?.candidatePath !==
       'candidates/raster-orthogonal-v0.1/plan-a.json'
   ) {
@@ -217,6 +219,11 @@ try {
       ['--report', join(root, 'benchmark-raster.json')],
       '输出路径冲突',
       '输出路径别名',
+    )
+    expectBatchRejected(
+      ['--benchmark-report', join(root, 'benchmark-raster.json')],
+      '输出路径冲突',
+      'Benchmark 结果与 Manifest 共享目标',
     )
 
     if ((await exists(join(outside, 'escaped.json'))) ||
