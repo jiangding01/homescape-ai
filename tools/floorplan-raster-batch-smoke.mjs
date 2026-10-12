@@ -225,6 +225,16 @@ try {
       '输出路径冲突',
       'Benchmark 结果与 Manifest 共享目标',
     )
+    expectBatchRejected(
+      ['--report', join(root, 'ground-truth', 'plan-a.json')],
+      'Corpus 输入文件路径冲突',
+      'Report 不能覆盖 Ground Truth',
+    )
+    expectBatchRejected(
+      ['--corpus-report', corpusPath],
+      'Corpus 输入文件路径冲突',
+      'Corpus Summary 不能覆盖 Corpus Manifest',
+    )
 
     if ((await exists(join(outside, 'escaped.json'))) ||
         (await readFile(join(outside, 'sentinel.json'), 'utf8')) !== 'untouched') {
