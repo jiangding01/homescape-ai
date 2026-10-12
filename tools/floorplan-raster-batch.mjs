@@ -2,6 +2,7 @@
 
 import { spawnSync } from 'node:child_process'
 import {
+  lstat,
   mkdir,
   readFile,
   realpath,
@@ -269,6 +270,40 @@ function assertOutputWithinRoot(root, target, label) {
   return resolve(target)
 }
 
+// 校验目标路径的现存父目录（含符号链接）与文件本身，禁止经 symlink 写出 Corpus。
+// 输入 Corpus 根目录本身可为符号链接，但其内部输出不能越过真实根目录。
+async function assertSafeOutputPath(root, target, label) {
+  const realRoot = await realpath(root)
+  let parent = dirname(target)
+
+  while (true) {
+    let realParent
+    try {
+      realParent = await realpath(parent)
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+      const next = dirname(parent)
+      if (next === parent) throw new Error(label + ' 无法解析输出父目录')
+      parent = next
+      continue
+    }
+
+    const rel = relative(realRoot, realParent)
+    if (rel === '..' || rel.startsWith('..' + sep)) {
+      throw new Error(label + ' 输出目录通过符号链接越过 Corpus 目录')
+    }
+    break
+  }
+
+  try {
+    if ((await lstat(target)).isSymbolicLink()) {
+      throw new Error(label + ' 输出文件不能是符号链接')
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
+}
+
 async function resolveWithinRoot(root, pathValue, label) {
   const target = resolve(root, pathValue)
   const [realRoot, realTarget] = await Promise.all([
@@ -362,14 +397,56 @@ async function main() {
     args.experimentManifestPath ??
     resolve(root, 'experiment-raster.json')
 
-  for (const [label, path] of [
+  const candidateRoot = resolve(
+    root,
+    'candidates',
+    args.extractorId,
+  )
+  const metadataRoot = resolve(
+    root,
+    'metadata',
+    args.extractorId,
+  )
+
+  // 在任何写入或 Extractor 启动前验证全部输出，避免路径别名、符号链接和
+  // 后续 Case 输入错误让本轮留下部分 Candidate / Metadata。
+  const writablePaths = [
     ['corpus-report', corpusReportPath],
     ['report', reportPath],
     ['benchmark-manifest', benchmarkManifestPath],
-    ['benchmark-report', benchmarkReportPath],
     ['experiment-manifest', experimentManifestPath],
-  ]) {
-    assertOutputWithinRoot(root, path, label)
+    ...manifest.cases.flatMap((corpusCase) => [
+      [
+        'candidate:' + corpusCase.id,
+        resolve(candidateRoot, corpusCase.id + '.json'),
+      ],
+      [
+        'metadata:' + corpusCase.id,
+        resolve(metadataRoot, corpusCase.id + '.json'),
+      ],
+    ]),
+  ]
+  const seenWritablePaths = new Map()
+
+  for (const [label, path] of writablePaths) {
+    const absolutePath = assertOutputWithinRoot(root, path, label)
+    // 对默认不区分文件名大小写的系统也保留一致的输出契约。
+    const identity = absolutePath.toLowerCase()
+    if (seenWritablePaths.has(identity)) {
+      throw new Error(
+        label + ' 与 ' + seenWritablePaths.get(identity) + ' 输出路径冲突',
+      )
+    }
+    seenWritablePaths.set(identity, label)
+    await assertSafeOutputPath(root, absolutePath, label)
+  }
+  assertOutputWithinRoot(root, benchmarkReportPath, 'benchmark-report')
+  await assertSafeOutputPath(root, benchmarkReportPath, 'benchmark-report')
+
+  const preparedCases = []
+  for (const corpusCase of preparedCases) {
+    const sourcePath = corpusCase.sourcePath
+    preparedCases.push({ ...corpusCase, sourcePath })
   }
 
   await mkdir(dirname(corpusReportPath), { recursive: true })
@@ -403,17 +480,6 @@ async function main() {
   ) {
     throw new Error('Corpus Summary 与 Manifest / Fingerprint 不一致')
   }
-
-  const candidateRoot = resolve(
-    root,
-    'candidates',
-    args.extractorId,
-  )
-  const metadataRoot = resolve(
-    root,
-    'metadata',
-    args.extractorId,
-  )
 
   if (!args.dryRun) {
     await mkdir(candidateRoot, { recursive: true })
