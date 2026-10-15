@@ -1,5 +1,6 @@
 import type { FloorPlanReviewBurdenRecord } from '@homescape/floorplan-extractor'
 import {
+  getFloorPlanCalibrationAxisError,
   isFloorPlanDraft,
   type FloorPlanDraft,
   type FloorPlanDraftOpening,
@@ -202,6 +203,9 @@ function getDraftIssues(draft: FloorPlanDraft) {
   const calibrationPoints = [
     draft.calibration.startPx,
     draft.calibration.endPx,
+    ...(draft.calibrationY
+      ? [draft.calibrationY.startPx, draft.calibrationY.endPx]
+      : []),
   ]
 
   if (
@@ -227,6 +231,25 @@ function getDraftIssues(draft: FloorPlanDraft) {
 
   if (draft.calibration.realDistanceMeters <= 0) {
     issues.push('标尺真实距离必须大于 0')
+  }
+
+  if (draft.calibrationY) {
+    if (
+      pointDistance(draft.calibrationY.startPx, draft.calibrationY.endPx) <= 1
+    ) {
+      issues.push('纵向标尺两端距离过短')
+    }
+
+    if (draft.calibrationY.realDistanceMeters <= 0) {
+      issues.push('纵向标尺真实距离必须大于 0')
+    }
+
+    for (const axisError of [
+      getFloorPlanCalibrationAxisError(draft.calibration, 'x'),
+      getFloorPlanCalibrationAxisError(draft.calibrationY, 'y'),
+    ]) {
+      if (axisError) issues.push(axisError)
+    }
   }
 
   if (draft.assumptions.wallThicknessMeters <= 0) {
@@ -870,7 +893,8 @@ export function FloorPlanAnnotationWorkbench({
     }
     if (!window.confirm('将清空当前 Room / Opening，并从已上传的原图开始标注。确定继续？')) return
     const { widthPx, heightPx } = sourceImage
-    setWorkingDraft((current) => ({
+    setWorkingDraft(({ calibrationY: _staleCalibrationY, ...current }) => ({
+      // 从空白开始时丢弃旧图的纵向标定，避免沿用到新图
       ...current,
       source: { kind: 'floorplan_image', sourceLabel: caseId, widthPx, heightPx },
       calibration: {

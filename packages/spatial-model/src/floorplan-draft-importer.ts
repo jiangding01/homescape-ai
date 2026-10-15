@@ -1,9 +1,12 @@
 import { distance2D, polygonArea, type Vec2 } from './geometry'
-import type {
-  FloorPlanDraft,
-  FloorPlanDraftOpening,
-  FloorPlanDraftRoom,
-  PixelPoint,
+import {
+  getFloorPlanCalibrationAxisError,
+  type FloorPlanCalibration,
+  type FloorPlanCalibrationAxis,
+  type FloorPlanDraft,
+  type FloorPlanDraftOpening,
+  type FloorPlanDraftRoom,
+  type PixelPoint,
 } from './floorplan-draft'
 import type {
   Floor,
@@ -30,6 +33,15 @@ interface EdgeBinding {
   wallId: SpatialId
   reversed: boolean
   lengthMeters: number
+  /** 沿该边方向每像素对应的米数（非等比缩放时随边方向变化） */
+  metersPerPixel: number
+}
+
+export interface FloorPlanDraftScale {
+  /** 横向每米像素数（sx） */
+  pixelsPerMeterX: number
+  /** 纵向每米像素数（sy），未提供 calibrationY 时等于 sx */
+  pixelsPerMeterY: number
 }
 
 interface WallBuilder {
@@ -85,6 +97,76 @@ function assertPixelPointWithinSource(
 
 function pixelDistance(a: PixelPoint, b: PixelPoint) {
   return Math.hypot(b[0] - a[0], b[1] - a[1])
+}
+
+function calibrationPixelsPerMeter(
+  calibration: FloorPlanCalibration,
+  label: string,
+  widthPx: number,
+  heightPx: number,
+) {
+  assertPositiveFinite(
+    calibration.realDistanceMeters,
+    label + '.realDistanceMeters',
+  )
+  assertPixelPointWithinSource(
+    calibration.startPx,
+    widthPx,
+    heightPx,
+    label + '.startPx',
+  )
+  assertPixelPointWithinSource(
+    calibration.endPx,
+    widthPx,
+    heightPx,
+    label + '.endPx',
+  )
+
+  const distancePx = pixelDistance(calibration.startPx, calibration.endPx)
+  assertPositiveFinite(distancePx, label + ' pixel distance')
+
+  return distancePx / calibration.realDistanceMeters
+}
+
+/**
+ * 解析 FloorPlanDraft 的像素 → 米比例：calibration 给出 sx，
+ * calibrationY 给出 sy；只有一条标定时按等比处理（sy = sx）。
+ */
+export function resolveFloorPlanDraftScale(
+  draft: Pick<FloorPlanDraft, 'source' | 'calibration' | 'calibrationY'>,
+): FloorPlanDraftScale {
+  const { widthPx, heightPx } = draft.source
+  const pixelsPerMeterX = calibrationPixelsPerMeter(
+    draft.calibration,
+    'calibration',
+    widthPx,
+    heightPx,
+  )
+
+  if (!draft.calibrationY) {
+    return { pixelsPerMeterX, pixelsPerMeterY: pixelsPerMeterX }
+  }
+
+  const axisErrors: Array<[FloorPlanCalibration, FloorPlanCalibrationAxis]> =
+    [
+      [draft.calibration, 'x'],
+      [draft.calibrationY, 'y'],
+    ]
+
+  for (const [calibration, axis] of axisErrors) {
+    const error = getFloorPlanCalibrationAxisError(calibration, axis)
+    if (error) throw new Error(error)
+  }
+
+  return {
+    pixelsPerMeterX,
+    pixelsPerMeterY: calibrationPixelsPerMeter(
+      draft.calibrationY,
+      'calibrationY',
+      widthPx,
+      heightPx,
+    ),
+  }
 }
 
 function pixelKey(point: PixelPoint) {
@@ -175,10 +257,6 @@ export class FloorPlanDraftImporter
     assertPositiveFinite(input.source.widthPx, 'source.widthPx')
     assertPositiveFinite(input.source.heightPx, 'source.heightPx')
     assertPositiveFinite(
-      input.calibration.realDistanceMeters,
-      'calibration.realDistanceMeters',
-    )
-    assertPositiveFinite(
       input.assumptions.wallThicknessMeters,
       'assumptions.wallThicknessMeters',
     )
@@ -187,18 +265,8 @@ export class FloorPlanDraftImporter
       'assumptions.ceilingHeightMeters',
     )
 
-    assertPixelPointWithinSource(
-      input.calibration.startPx,
-      input.source.widthPx,
-      input.source.heightPx,
-      'calibration.startPx',
-    )
-    assertPixelPointWithinSource(
-      input.calibration.endPx,
-      input.source.widthPx,
-      input.source.heightPx,
-      'calibration.endPx',
-    )
+    const { pixelsPerMeterX, pixelsPerMeterY } =
+      resolveFloorPlanDraftScale(input)
 
     const draftIds = new Set<string>()
 
@@ -238,15 +306,6 @@ export class FloorPlanDraftImporter
       )
     }
 
-    const calibrationPx = pixelDistance(
-      input.calibration.startPx,
-      input.calibration.endPx,
-    )
-
-    assertPositiveFinite(calibrationPx, 'calibration pixel distance')
-
-    const pixelsPerMeter =
-      calibrationPx / input.calibration.realDistanceMeters
     const allPoints = input.rooms.flatMap((room) => room.boundaryPx)
 
     if (allPoints.length === 0) {
@@ -254,8 +313,8 @@ export class FloorPlanDraftImporter
     }
 
     const toRawWorld = (point: PixelPoint): Vec2 => [
-      point[0] / pixelsPerMeter,
-      (input.source.heightPx - point[1]) / pixelsPerMeter,
+      point[0] / pixelsPerMeterX,
+      (input.source.heightPx - point[1]) / pixelsPerMeterY,
     ]
 
     const rawWorldPoints = allPoints.map(toRawWorld)
@@ -326,6 +385,8 @@ export class FloorPlanDraftImporter
             wallId: existing.wall.id,
             reversed,
             lengthMeters: distance2D(start, end),
+            metersPerPixel:
+              distance2D(start, end) / pixelDistance(startPx, endPx),
           })
           continue
         }
@@ -357,6 +418,8 @@ export class FloorPlanDraftImporter
           wallId,
           reversed: false,
           lengthMeters: distance2D(start, end),
+          metersPerPixel:
+            distance2D(start, end) / pixelDistance(startPx, endPx),
         })
       }
 
@@ -441,6 +504,51 @@ export class FloorPlanDraftImporter
       })
     }
 
+    const scaleTargets: Array<{
+      id: string
+      label: string
+      calibration: FloorPlanCalibration
+      pixelsPerMeter: number
+    }> = input.calibrationY
+      ? [
+          {
+            id: 'issue-calibration-x-assumption',
+            label: '横向比例尺',
+            calibration: input.calibration,
+            pixelsPerMeter: pixelsPerMeterX,
+          },
+          {
+            id: 'issue-calibration-y-assumption',
+            label: '纵向比例尺',
+            calibration: input.calibrationY,
+            pixelsPerMeter: pixelsPerMeterY,
+          },
+        ]
+      : [
+          {
+            id: 'issue-calibration-assumption',
+            label: '比例尺',
+            calibration: input.calibration,
+            pixelsPerMeter: pixelsPerMeterX,
+          },
+        ]
+
+    for (const target of scaleTargets) {
+      if (target.calibration.basis !== 'assumed') continue
+
+      unresolved.push({
+        id: target.id,
+        kind: 'missing_dimension',
+        message:
+          target.label +
+          '当前使用 ' +
+          target.pixelsPerMeter.toFixed(2) +
+          ' px/m 假设值，需要按图上尺寸线确认',
+        entityIds: rooms.map((room) => room.id),
+        requiresHumanReview: true,
+      })
+    }
+
     const openings: Opening[] = []
     const connections: RoomConnection[] = []
     const wallBuilderById = new Map(
@@ -450,7 +558,6 @@ export class FloorPlanDraftImporter
     for (const draftOpening of input.openings) {
       const imported = this.importOpening(
         draftOpening,
-        pixelsPerMeter,
         context,
         edgeBindings,
         wallBuilderById,
@@ -577,7 +684,6 @@ export class FloorPlanDraftImporter
 
   private importOpening(
     draft: FloorPlanDraftOpening,
-    pixelsPerMeter: number,
     context: SpatialImportContext,
     edgeBindings: Map<string, EdgeBinding>,
     wallBuilderById: Map<SpatialId, WallBuilder>,
@@ -616,8 +722,8 @@ export class FloorPlanDraftImporter
       )
     }
 
-    const width = draft.widthPx / pixelsPerMeter
-    const sourceOffset = draft.offsetPx / pixelsPerMeter
+    const width = draft.widthPx * binding.metersPerPixel
+    const sourceOffset = draft.offsetPx * binding.metersPerPixel
     const offset = binding.reversed
       ? binding.lengthMeters - sourceOffset - width
       : sourceOffset

@@ -75,6 +75,18 @@ Calibration：
 - startPx
 - endPx
 - realDistanceMeters
+- basis（可选）
+
+### 双轴标定与比例尺来源
+
+网络户型图常被非等比缩放（实测横纵 px/m 可差 10%–17%），单一比例会让房间面积系统性偏大或偏小。协议因此支持两条标定：
+
+- `calibration`：横向标定（沿 x 轴的尺寸线），给出 sx；若没有 `calibrationY`，它就是唯一标定，按等比处理（与旧数据一致，不限制方向）。
+- `calibrationY`（可选）：纵向标定（沿 y 轴的尺寸线），给出 sy。提供后导入按 x / y 分轴换算，开口宽度按所在边方向换算。
+- 双轴时横向标定须 |dx| ≥ |dy|、纵向标定须 |dy| ≥ |dx|，否则 Draft 无效、导入报错：方向写反会静默互换 sx / sy，误差与要修的问题同量级，不能只当警告。
+- `basis` 表示比例尺来源：`assumed`（假设 px/m，如 Raster 默认值）、`annotated`（人工沿尺寸线标注）、`extracted`（自动从图上尺寸标注读出）、`structured`（米制结构化数据换算）。缺省视为旧数据未声明来源。
+- `basis: 'assumed'` 导入时生成 `issue-calibration-assumption`（双轴时为 `issue-calibration-x/y-assumption`）待确认问题，阻断 Finalize，与墙厚 / 层高未确认一致；缺省 basis 不阻断，以兼容已有人工 GT。
+- Benchmark 分别比较 X / Y 轴比例尺（任一侧缺 Y 时回退到 X），报告新增 `scaleErrorRatioX` / `scaleErrorRatioY`，原 `scaleErrorRatio` 取两轴最大值。
 
 Assumptions：
 

@@ -152,6 +152,8 @@ function calibrationFromLines(
     startPx: [minX, maxY] as const,
     endPx: [minX + distancePx, maxY] as const,
     realDistanceMeters: distancePx / pixelsPerMeter,
+    // px/m 来自配置假设而非图面尺寸线，下游导入时会阻断 Finalize
+    basis: 'assumed' as const,
   }
 }
 

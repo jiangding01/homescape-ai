@@ -1,7 +1,9 @@
-import type {
-  Opening,
-  PixelPoint,
-  RoomType,
+import {
+  isFloorPlanCalibrationBasis,
+  type FloorPlanCalibrationBasis,
+  type Opening,
+  type PixelPoint,
+  type RoomType,
 } from '@homescape/spatial-model'
 import type {
   FloorPlanExtractorInput,
@@ -53,6 +55,8 @@ export interface FloorPlanGeometryObservationV01 {
     endPx: PixelPoint
     realDistanceMeters: number
     confidence?: number
+    /** 比例尺来源；缺省时重建器按 'assumed' 处理 */
+    basis?: FloorPlanCalibrationBasis
   }
   assumptions?: {
     wallThicknessMeters?: number
@@ -169,7 +173,9 @@ export function parseFloorPlanGeometryObservation(
     !isPixelPoint(calibration.startPx) ||
     !isPixelPoint(calibration.endPx) ||
     !isPositiveFinite(calibration.realDistanceMeters) ||
-    !isConfidence(calibration.confidence)
+    !isConfidence(calibration.confidence) ||
+    (calibration.basis !== undefined &&
+      !isFloorPlanCalibrationBasis(calibration.basis))
   ) {
     throw new Error('calibration 格式无效')
   }
