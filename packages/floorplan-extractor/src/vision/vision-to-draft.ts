@@ -221,10 +221,11 @@ function matchOpeningToRoomEdges(
       const distancePx = (ps.across + pe.across) / 2
       if (distancePx > maxDistancePx) return
 
-      // 先对端点取整再求宽度，保证 offset + width 不因分别取整而超出边长。
+      // 起点取整，宽度向下取整到 0.1 px：斜边长度不是 0.1 的整倍数，四舍五入会让 offset + width 超出边长。
       const from = round(Math.max(0, Math.min(ps.along, pe.along)))
-      const to = Math.min(round(Math.min(edgeLength, Math.max(ps.along, pe.along))), edgeLength)
-      const widthPx = round(to - from)
+      const to = Math.min(edgeLength, Math.max(ps.along, pe.along))
+      const flooredWidth = Math.floor((to - from) * 10 + 1e-6) / 10
+      const widthPx = from + flooredWidth > to ? round(flooredWidth - 0.1) : flooredWidth
       // 至少一半开口宽度落在这条边上，避免绑到相邻的短边。
       if (widthPx < Math.max(1, segmentLength * 0.5)) return
 
