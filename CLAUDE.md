@@ -27,6 +27,7 @@ pnpm dev                      # web :5173 + api :3001
 pnpm typecheck
 pnpm test                     # vitest，测试文件为 src/**/*.test.ts 与 tools/**/*.test.mjs
 pnpm build
+# API 数据库默认 apps/api/.data/homescape.sqlite（HOMESCAPE_DB_PATH 可覆盖）；默认只监听 127.0.0.1（HOST 可覆盖），写接口无鉴权
 pnpm floorplan:raster:check-demo   # 其余 *:check-demo 见 package.json
 pnpm floorplan:vision -- <intake.json>   # 视觉大模型 Extractor，需 ANTHROPIC_API_KEY；--dry-run / --replay 无需 Key
 ```

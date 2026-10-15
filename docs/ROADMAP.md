@@ -9,8 +9,8 @@
 - [x] Planner contract
 - [x] Renderer contract
 - [x] CI 基础链路
-- [ ] 首次 pnpm lockfile
-- [ ] 基础单元测试
+- [x] 首次 pnpm lockfile
+- [x] 基础单元测试（vitest，CI 执行）
 
 ## PR #2 — HomeSpatialModel Core
 
@@ -278,6 +278,44 @@
 - [ ] Symbol Detector
 - [ ] PDF Rasterization
 
+## 工程主线（2026-10-15 起）
+
+### 第一批修复（PR #19）
+
+- [x] vitest 与 CI 单元测试，CLAUDE.md、docs/HANDOFF.md
+- [x] 旋转约定统一（`rotateLocalToWorld` / `yawFromDirection`）
+- [x] 非用户来源解锁被 Planner 与 Revision 引擎拒绝
+- [x] 撤销 / 重做改为补偿式 Revision
+- [x] 删除 / 替换操作需确认
+- [x] `/api/design/interpret` 输入上限与限流
+- [x] 风格值统一为连字符
+
+### 几何内核（PR #28，ADR-0018）
+
+- [x] 房间边界 = 墙体内表面，俯视逆时针
+- [x] `inferWallsFromRooms`：成对边推导墙体，T 型接头切分，未配对边生成外墙
+- [x] Wall 增加 `sides` / `thicknessSource`，门窗绑定墙段
+- [x] 共享墙门推导房间连接，外墙门连到 `EXTERIOR_SPACE_ID`
+- [x] Planner 沿房间边靠墙、正面朝内，贴墙距离不再扣墙厚
+- [x] 导入器修复上下镜像；schemaVersion 0.3.0
+
+### 状态服务端化（PR #32，ADR-0019）
+
+- [x] `@homescape/contracts`（zod）前后端共用契约
+- [x] `node:sqlite` 持久化：项目、不可变空间模型、时间线、只追加 Revision
+- [x] `/api/v1` 项目 / 空间模型 / Revision / Undo / Redo 接口，服务端运行 Planner
+- [x] 前端 Zustand store，刷新与重启后状态保留
+
+### 待办
+
+- [ ] 对话式设计 Agent
+- [ ] 布局规划器 v2（窗前净空、家具成组）
+- [ ] 沙发可能贴窗
+- [ ] 默认 3D 视角遮挡示例客厅
+- [ ] Planner 诊断未回传前端
+- [ ] 重复切换示例空间会新增空间模型版本
+- [ ] 资产正面轴向标准化（演示资产 −Z，glTF 规范 +Z）
+
 ## P1 — Real Room Vertical Slice
 
 目标：证明真实产品价值，而不是完成整个平台。
@@ -306,7 +344,7 @@
 - [x] case-004 正式 Benchmark：Raster Extractor 房间召回 0%、比例尺误差 84%
 - [x] 视觉大模型盲测（2 Case）：房间 IoU 98%、比例尺误差 < 1%、门窗召回约 80%
 - [x] 比例尺横纵分轴标定与来源字段
-- [ ] 标注工作台：画布放置门窗、草稿自动保存、手柄按屏幕尺寸
+- [x] 标注工作台：画布放置门窗、草稿自动保存、手柄按屏幕尺寸
 - [x] 可复现的视觉大模型 Extractor：`floorplan:vision` 批量运行 + 原始响应录制 / 回放 + `floorplan:vision:compare` 运行间一致性
 - [ ] 用 `floorplan:vision` 在本地复测 Pilot A / B 共 20 张样本，并对 case-001 / case-004 跑正式 Benchmark
 
