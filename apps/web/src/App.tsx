@@ -1,34 +1,19 @@
-import { InMemoryCatalog, livingRoomCatalog } from '@homescape/catalog'
-import {
-  commitToTimeline,
-  createInitialDesignState,
-  createRevisionTimeline,
-  redoTimeline,
-  undoTimeline,
-  type DesignOperation,
-  type DesignRevisionDraft,
-} from '@homescape/domain'
-import { RuleBasedPlanner, type PlannerResult } from '@homescape/planner'
+import { livingRoomCatalog } from '@homescape/catalog'
+import { MAX_COMMAND_LENGTH } from '@homescape/contracts'
 import { createRenderSnapshot } from '@homescape/renderer-contract'
 import {
   buildRoomGraph,
-  polygonArea,
   polygonCenter,
   sampleApartment,
   validateHomeSpatialModel,
-  type HomeSpatialModel,
-  type Room,
   type Vec2,
 } from '@homescape/spatial-model'
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-} from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { BabylonViewport } from './BabylonViewport'
 import { FloorPlanImportWorkbench } from './FloorPlanImportWorkbench'
+import { selectPrimaryDesignRoom } from './store/operations'
+import { useWorkspace } from './store/use-workspace'
+import { getWorkspaceStore } from './store/workspace-store'
 import './floorplan-import.css'
 
 type Health = {
@@ -39,82 +24,6 @@ type Health = {
 
 type SpatialView = '3d' | '2d'
 
-type AIInterpretationResponse = {
-  status: 'ready' | 'needs_clarification' | 'unsupported' | 'no_change'
-  message: string
-  operations: DesignOperation[]
-  decisions: {
-    intent: { value: string; confidence: number }
-    scope: { value: string; confidence: number }
-    target: { value: string; confidence: number }
-    category: { value: string; confidence: number }
-    size: { value: string; confidence: number }
-    color: { value: string; confidence: number }
-    seats: { value: string; confidence: number }
-    style: { value: string; confidence: number }
-    preserveOthers: number
-  }
-  meta: {
-    provider: string
-    model: string
-    latencyMs: number
-    usage?: {
-      inputTokens?: number
-      outputTokens?: number
-      cost?: number
-    }
-  }
-}
-
-type AIExecutionMeta = AIInterpretationResponse['meta']
-
-type APIErrorResponse = {
-  error?: {
-    code?: string
-    message?: string
-  }
-}
-
-type PendingDestructiveProposal = {
-  request: string
-  operations: DesignOperation[]
-  meta: AIExecutionMeta
-  targets: { action: '删除' | '替换'; name: string }[]
-  epoch: number
-  spatialModelId: string
-  headRevisionId: string | null
-}
-
-const WORKBENCH_PROJECT_ID = 'project-live-workbench'
-const INTERPRET_TIMEOUT_MS = 20_000
-
-function createWorkspaceTimeline(spatialModel: HomeSpatialModel) {
-  return createRevisionTimeline(
-    createInitialDesignState({
-      projectId: WORKBENCH_PROJECT_ID,
-      spatialModelId: spatialModel.id,
-    }),
-  )
-}
-
-function selectPrimaryDesignRoom(
-  spatialModel: HomeSpatialModel,
-): Room | undefined {
-  const rooms = spatialModel.floors.flatMap((floor) => floor.rooms)
-
-  return (
-    rooms.find((room) => room.type === 'living') ??
-    rooms.find((room) => room.type === 'dining') ??
-    rooms.reduce<Room | undefined>((largest, room) => {
-      if (!largest) return room
-
-      return polygonArea(room.boundary) > polygonArea(largest.boundary)
-        ? room
-        : largest
-    }, undefined)
-  )
-}
-
 /**
  * 平面视图按从 +Y 俯视绘制：屏幕右为 +X、屏幕下为 +Z（与 3D 俯视、导入原图方向一致），
  * 因此 z 直接映射为屏幕 y，不做翻转。
@@ -123,40 +32,43 @@ function projectPoint(point: Vec2, minX: number, minZ: number, scale: number) {
   return [(point[0] - minX) * scale, (point[1] - minZ) * scale] as const
 }
 
+function defaultCommandFor(roomName: string) {
+  return '为' + roomName + '布置现代原木风的沙发、茶几和绿植'
+}
+
 export function App() {
+  // 领域状态与编排都在 workspace store；组件只订阅与派发，UI 局部状态（输入框、视图）留在这里。
+  const status = useWorkspace((state) => state.status)
+  const loadError = useWorkspace((state) => state.loadError)
+  const project = useWorkspace((state) => state.project)
+  const planning = useWorkspace((state) => state.planning)
+  const interpreting = useWorkspace((state) => state.interpreting)
+  const switching = useWorkspace((state) => state.switching)
+  const revisionError = useWorkspace((state) => state.revisionError)
+  const notice = useWorkspace((state) => state.notice)
+  const plannerFeedback = useWorkspace((state) => state.plannerFeedback)
+  const aiFeedback = useWorkspace((state) => state.aiFeedback)
+  const aiError = useWorkspace((state) => state.aiError)
+  const pendingProposal = useWorkspace((state) => state.pendingProposal)
+  const actions = getWorkspaceStore().getState()
+
   const [health, setHealth] = useState<Health | null>(null)
   const [view, setView] = useState<SpatialView>('3d')
-  const [activeSpatialModel, setActiveSpatialModel] =
-    useState<HomeSpatialModel>(sampleApartment)
-  const [timeline, setTimeline] = useState(() =>
-    createWorkspaceTimeline(sampleApartment),
-  )
-  const [planning, setPlanning] = useState(false)
-  const [interpreting, setInterpreting] = useState(false)
-  const [command, setCommand] = useState(
-    '为客厅布置现代原木风的沙发、茶几和绿植',
-  )
-  const [aiFeedback, setAiFeedback] =
-    useState<AIInterpretationResponse | null>(null)
-  const [aiError, setAiError] = useState<string | null>(null)
-  const [pendingProposal, setPendingProposal] =
-    useState<PendingDestructiveProposal | null>(null)
-  const [revisionError, setRevisionError] = useState<string | null>(null)
-  const [plannerFeedback, setPlannerFeedback] =
-    useState<PlannerResult | null>(null)
-  const revisionSequence = useRef(1)
-  const aiRequestSequence = useRef(1)
-  const workspaceEpochRef = useRef(0)
-  const planningRef = useRef(false)
-  const interpretingRef = useRef(false)
-  const catalog = useMemo(() => new InMemoryCatalog(livingRoomCatalog), [])
-  const planner = useMemo(() => new RuleBasedPlanner(catalog), [catalog])
+  const [command, setCommand] = useState(defaultCommandFor('客厅'))
+
+  const activeSpatialModel = project?.spatialModel.model
+  const spatialModelVersionId = project?.spatialModel.id
+  const designState = project?.state
   const renderAssetResolver = useMemo(() => {
-    const assets = new Map(
-      livingRoomCatalog.map((asset) => [asset.id, asset.renderAsset]),
-    )
+    const assets = new Map(livingRoomCatalog.map((asset) => [asset.id, asset.renderAsset]))
 
     return (assetId: string) => assets.get(assetId)
+  }, [])
+
+  useEffect(() => {
+    void actions.initialize()
+    // actions 是 store 的稳定引用。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -170,27 +82,64 @@ export function App() {
     return () => controller.abort()
   }, [])
 
+  const activeRoom = useMemo(
+    () => (activeSpatialModel ? selectPrimaryDesignRoom(activeSpatialModel) : undefined),
+    [activeSpatialModel],
+  )
+
+  // 切换空间模型（新时间线）时重置输入示例与视图。
+  const activeRoomName = activeRoom?.name
+  useEffect(() => {
+    if (!spatialModelVersionId || !activeRoomName) return
+    setCommand(defaultCommandFor(activeRoomName))
+    setView('3d')
+  }, [spatialModelVersionId, activeRoomName])
+
   const validation = useMemo(
-    () => validateHomeSpatialModel(activeSpatialModel),
+    () => (activeSpatialModel ? validateHomeSpatialModel(activeSpatialModel) : undefined),
     [activeSpatialModel],
   )
   const renderSnapshot = useMemo(
     () =>
-      activeSpatialModel.id === timeline.state.spatialModelId
-        ? createRenderSnapshot(activeSpatialModel, timeline.state, {
-            resolveAsset: renderAssetResolver,
-          })
+      activeSpatialModel && designState
+        ? // 服务端 DesignState.spatialModelId 是空间模型版本 ID，与户型自身 ID 不同；
+          // RenderSnapshot 以户型自身 ID 校验配对，这里按所属模型对齐。
+          createRenderSnapshot(
+            activeSpatialModel,
+            { ...designState, spatialModelId: activeSpatialModel.id },
+            { resolveAsset: renderAssetResolver },
+          )
         : undefined,
-    [activeSpatialModel, renderAssetResolver, timeline.state],
+    [activeSpatialModel, designState, renderAssetResolver],
   )
-  const activeRoom = useMemo(
-    () => selectPrimaryDesignRoom(activeSpatialModel),
-    [activeSpatialModel],
-  )
-  const floor = activeSpatialModel.floors[0]
+  const floor = activeSpatialModel?.floors[0]
 
-  if (!floor || !activeRoom || !renderSnapshot) {
-    return <main className="shell">正在切换空间工作区…</main>
+  if (status === 'error') {
+    return (
+      <main className="shell">
+        <div className="ai-feedback ai-feedback-error">
+          <strong>项目加载失败</strong>
+          <span>{loadError}</span>
+          <div className="ai-proposal-actions">
+            <button type="button" onClick={() => void actions.initialize()}>
+              重试
+            </button>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  if (
+    !project ||
+    !designState ||
+    !activeSpatialModel ||
+    !validation ||
+    !floor ||
+    !activeRoom ||
+    !renderSnapshot
+  ) {
+    return <main className="shell">正在加载项目…</main>
   }
 
   const graph = buildRoomGraph(floor)
@@ -208,413 +157,17 @@ export function App() {
   const scale = 84
   const canvasWidth = (maxX - minX) * scale
   const canvasHeight = (maxZ - minZ) * scale
-  const objects = Object.values(timeline.state.objects)
+  const objects = Object.values(designState.objects)
   const sofa = objects.find((object) => object.category === 'sofa')
+  const sofaLocked = Boolean(sofa && designState.locks[sofa.id])
   const layoutReady = objects.length > 0
-  const renderAssetCount = livingRoomCatalog.filter(
-    (asset) => asset.renderAsset,
-  ).length
-  const busy = planning || interpreting
+  const renderAssetCount = livingRoomCatalog.filter((asset) => asset.renderAsset).length
+  const busy = planning || interpreting || switching
   const usingImportedModel = activeSpatialModel.id !== sampleApartment.id
 
-  const activateSpatialModel = (spatialModel: HomeSpatialModel) => {
-    if (planningRef.current || interpretingRef.current) {
-      throw new Error('设计任务执行期间不能切换空间模型')
-    }
-
-    const nextValidation = validateHomeSpatialModel(spatialModel)
-
-    if (!nextValidation.valid) {
-      throw new Error('不能切换到未通过 HomeSpatialModel Validation 的空间模型')
-    }
-
-    const nextRoom = selectPrimaryDesignRoom(spatialModel)
-
-    if (!nextRoom) {
-      throw new Error('Finalize 的空间模型没有可设计房间')
-    }
-
-    workspaceEpochRef.current += 1
-    setActiveSpatialModel(spatialModel)
-    setTimeline(createWorkspaceTimeline(spatialModel))
-    setPlannerFeedback(null)
-    setAiFeedback(null)
-    setAiError(null)
-    setPendingProposal(null)
-    setRevisionError(null)
-    setCommand('为' + nextRoom.name + '布置现代原木风的沙发、茶几和绿植')
-    setView('3d')
-  }
-
-  // Undo / Redo 会追加补偿 Revision 并正常走锁检查，被拒绝时保留当前 timeline 并提示原因。
-  const changeTimeline = (change: typeof undoTimeline) => {
-    try {
-      setTimeline(change(timeline).timeline)
-      setRevisionError(null)
-    } catch (error) {
-      setRevisionError(error instanceof Error ? error.message : String(error))
-    }
-  }
-
-  const executePlan = async (
-    request: string,
-    operations: DesignOperation[],
-    aiMeta?: AIExecutionMeta,
-  ) => {
-    if (planningRef.current) return
-
-    planningRef.current = true
-    setPlanning(true)
-
-    try {
-      const baseTimeline = timeline
-      const spatialModel = activeSpatialModel
-      const workspaceEpoch = workspaceEpochRef.current
-      const result = await planner.plan({
-        spatialModel,
-        state: baseTimeline.state,
-        operations,
-      })
-
-      if (workspaceEpochRef.current !== workspaceEpoch) return
-
-      setPlannerFeedback(result)
-
-      const hasBlockingViolation = result.violations.some(
-        (violation) => violation.severity === 'error',
-      )
-
-      if (result.mutations.length === 0 || hasBlockingViolation) return
-
-      const sequence = revisionSequence.current
-      revisionSequence.current += 1
-      const revisionId = 'revision-planner-' + sequence
-      const draft: DesignRevisionDraft = {
-        id: revisionId,
-        projectId: baseTimeline.state.projectId,
-        expectedParentRevisionId: baseTimeline.state.headRevisionId ?? null,
-        request,
-        operations,
-        mutations: result.mutations,
-        provenance: {
-          // 解锁只允许 actor=user，Revision 引擎会据此校验，因此 actor 必须如实反映来源。
-          actor: operations.some((operation) => operation.source === 'ai')
-            ? 'ai'
-            : operations.every((operation) => operation.source === 'user')
-              ? 'user'
-              : 'system',
-          plannerVersion: 'rule-based-v0.1',
-          schemaVersion: '0.1.0',
-          ...(aiMeta
-            ? {
-                provider: aiMeta.provider,
-                model: aiMeta.model,
-              }
-            : {}),
-        },
-        createdAt: new Date().toISOString(),
-      }
-
-      setTimeline((current) => {
-        const currentHead = current.state.headRevisionId ?? null
-        const expectedHead = baseTimeline.state.headRevisionId ?? null
-
-        if (
-          workspaceEpochRef.current !== workspaceEpoch ||
-          current.state.spatialModelId !== spatialModel.id ||
-          currentHead !== expectedHead
-        ) {
-          return current
-        }
-
-        return commitToTimeline(current, draft).timeline
-      })
-    } finally {
-      planningRef.current = false
-      setPlanning(false)
-    }
-  }
-
-  const generateLivingRoom = () => {
-    const sequence = revisionSequence.current
-    const roomScope = { type: 'room', roomId: activeRoom.id } as const
-
-    void executePlan('为' + activeRoom.name + '生成现代原木风基础软装布局', [
-      {
-        id: 'operation-layout-' + sequence + '-sofa',
-        type: 'add_object',
-        source: 'user',
-        scope: roomScope,
-        category: 'sofa',
-        requirements: {
-          style: 'warm-modern',
-          minSeats: 3,
-          maxWidth: 2.3,
-        },
-      },
-      {
-        id: 'operation-layout-' + sequence + '-table',
-        type: 'add_object',
-        source: 'user',
-        scope: roomScope,
-        category: 'coffee_table',
-        requirements: {
-          style: 'warm-modern',
-          maxWidth: 1.3,
-        },
-      },
-      {
-        id: 'operation-layout-' + sequence + '-plant',
-        type: 'add_object',
-        source: 'user',
-        scope: roomScope,
-        category: 'plant',
-        requirements: {
-          styleTags: ['warm-modern', 'greenery'],
-        },
-      },
-    ])
-  }
-
-  const replaceWithCompactSofa = () => {
-    if (!sofa) return
-
-    const sequence = revisionSequence.current
-
-    void executePlan('沙发小一点，换成浅灰色三人位，其他家具保持不变', [
-      {
-        id: 'operation-replace-' + sequence + '-sofa',
-        type: 'replace_object',
-        source: 'user',
-        scope: {
-          type: 'object',
-          objectId: sofa.id,
-        },
-        objectId: sofa.id,
-        requirements: {
-          maxWidth: 1.95,
-          minSeats: 3,
-          colorFamily: 'light-gray',
-          style: 'warm-modern',
-        },
-      },
-      ...objects
-        .filter((object) => object.id !== sofa.id)
-        .map(
-          (object): DesignOperation => ({
-            id: 'operation-preserve-' + sequence + '-' + object.id,
-            type: 'preserve',
-            source: 'user',
-            scope: {
-              type: 'object',
-              objectId: object.id,
-            },
-            targetId: object.id,
-          }),
-        ),
-    ])
-  }
-
-  const lockSofa = () => {
-    if (!sofa) return
-
-    const sequence = revisionSequence.current
-    const locked = Boolean(timeline.state.locks[sofa.id])
-    const operation: DesignOperation = locked
-      ? {
-          id: 'operation-lock-' + sequence + '-sofa',
-          type: 'unlock',
-          source: 'user',
-          scope: {
-            type: 'object',
-            objectId: sofa.id,
-          },
-          targetId: sofa.id,
-        }
-      : {
-          id: 'operation-lock-' + sequence + '-sofa',
-          type: 'lock',
-          source: 'user',
-          scope: {
-            type: 'object',
-            objectId: sofa.id,
-          },
-          targetId: sofa.id,
-        }
-
-    void executePlan(
-      locked ? '解除沙发锁定' : '锁定沙发，后续自动设计不要修改',
-      [operation],
-    )
-  }
-
-  const submitNaturalLanguageCommand = async (event: FormEvent) => {
+  const submitNaturalLanguageCommand = (event: FormEvent) => {
     event.preventDefault()
-
-    const normalizedCommand = command.trim()
-    if (
-      !normalizedCommand ||
-      planningRef.current ||
-      interpretingRef.current ||
-      !activeRoom
-    ) {
-      return
-    }
-
-    interpretingRef.current = true
-    setInterpreting(true)
-    setAiError(null)
-    setPendingProposal(null)
-
-    const abortController = new AbortController()
-    const timeoutId = setTimeout(
-      () => abortController.abort(),
-      INTERPRET_TIMEOUT_MS,
-    )
-
-    try {
-      const requestId = 'design-command-' + aiRequestSequence.current
-      aiRequestSequence.current += 1
-
-      const contextObjects = objects.map((object) => {
-        const catalogName = object.metadata?.catalogName
-        const currentColor = object.metadata?.colorFamily
-
-        return {
-          id: object.id,
-          category: object.category,
-          label: typeof catalogName === 'string' ? catalogName : object.category,
-          locked: Boolean(timeline.state.locks[object.id]),
-          ...(object.roomId ? { roomId: object.roomId } : {}),
-          ...(object.zoneId ? { zoneId: object.zoneId } : {}),
-          ...(object.dimensions ? { width: object.dimensions[0] } : {}),
-          ...(typeof currentColor === 'string'
-            ? { colorFamily: currentColor }
-            : {}),
-        }
-      })
-
-      const response = await fetch('/api/design/interpret', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: abortController.signal,
-        body: JSON.stringify({
-          requestId,
-          command: normalizedCommand,
-          context: {
-            projectId: timeline.state.projectId,
-            activeRoom: {
-              id: activeRoom.id,
-              name: activeRoom.name,
-            },
-            objects: contextObjects,
-          },
-        }),
-      })
-
-      const responseText = await response.text()
-      let payload: unknown
-      try {
-        payload = JSON.parse(responseText)
-      } catch {
-        throw new Error(
-          '服务返回了无法识别的内容（HTTP ' +
-            response.status +
-            '），请稍后重试。',
-        )
-      }
-
-      if (!response.ok) {
-        const apiError = payload as APIErrorResponse
-        throw new Error(
-          apiError.error?.message ?? '自然语言设计接口请求失败',
-        )
-      }
-
-      const interpretation = payload as AIInterpretationResponse
-      setAiFeedback(interpretation)
-
-      if (
-        interpretation.status === 'ready' &&
-        interpretation.operations.length > 0
-      ) {
-        const targets = interpretation.operations.flatMap((operation) => {
-          if (
-            operation.type !== 'remove_object' &&
-            operation.type !== 'replace_object'
-          ) {
-            return []
-          }
-
-          const target = objects.find((item) => item.id === operation.objectId)
-          const catalogName = target?.metadata?.catalogName
-          const name =
-            typeof catalogName === 'string'
-              ? catalogName
-              : (target?.category ?? '未知对象（' + operation.objectId + '）')
-
-          return [
-            {
-              action: operation.type === 'remove_object' ? '删除' : '替换',
-              name,
-            } as const,
-          ]
-        })
-
-        if (targets.length > 0) {
-          setPendingProposal({
-            request: normalizedCommand,
-            operations: interpretation.operations,
-            meta: interpretation.meta,
-            targets,
-            epoch: workspaceEpochRef.current,
-            spatialModelId: timeline.state.spatialModelId,
-            headRevisionId: timeline.state.headRevisionId ?? null,
-          })
-        } else {
-          await executePlan(
-            normalizedCommand,
-            interpretation.operations,
-            interpretation.meta,
-          )
-        }
-      }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        setAiError('请求超时（超过 20 秒），请检查网络后重试。')
-      } else if (error instanceof TypeError) {
-        setAiError('无法连接到设计服务，请检查网络后重试。')
-      } else {
-        setAiError(
-          error instanceof Error ? error.message : '自然语言设计指令解析失败',
-        )
-      }
-    } finally {
-      clearTimeout(timeoutId)
-      interpretingRef.current = false
-      setInterpreting(false)
-    }
-  }
-
-  const confirmPendingProposal = async () => {
-    const proposal = pendingProposal
-    if (!proposal || planningRef.current || interpretingRef.current) return
-
-    setPendingProposal(null)
-
-    if (
-      workspaceEpochRef.current !== proposal.epoch ||
-      timeline.state.spatialModelId !== proposal.spatialModelId ||
-      (timeline.state.headRevisionId ?? null) !== proposal.headRevisionId
-    ) {
-      setAiError('工作区已发生变化，这次删除/替换提案已作废，请重新输入指令。')
-      return
-    }
-
-    setAiError(null)
-    await executePlan(proposal.request, proposal.operations, proposal.meta)
+    void actions.interpret(command)
   }
 
   return (
@@ -642,7 +195,7 @@ export function App() {
       <FloorPlanImportWorkbench
         activeSpatialModelId={activeSpatialModel.id}
         disabled={busy}
-        onFinalized={activateSpatialModel}
+        onFinalized={actions.switchSpatialModel}
       />
 
       <section className="command-section">
@@ -659,6 +212,7 @@ export function App() {
           <form className="command-composer" onSubmit={submitNaturalLanguageCommand}>
             <textarea
               value={command}
+              maxLength={MAX_COMMAND_LENGTH}
               onChange={(event) => setCommand(event.target.value)}
               rows={3}
               placeholder="例如：沙发小一点，换成浅灰色三人位，其他地方别动"
@@ -673,28 +227,16 @@ export function App() {
           </form>
 
           <div className="command-samples">
-            <button
-              type="button"
-              onClick={() =>
-                setCommand(
-                  '为' + activeRoom.name + '布置现代原木风的沙发、茶几和绿植',
-                )
-              }
-            >
+            <button type="button" onClick={() => setCommand(defaultCommandFor(activeRoom.name))}>
               第一版布局
             </button>
             <button
               type="button"
-              onClick={() =>
-                setCommand('沙发小一点，换成浅灰色三人位，其他地方别动')
-              }
+              onClick={() => setCommand('沙发小一点，换成浅灰色三人位，其他地方别动')}
             >
               局部替换
             </button>
-            <button
-              type="button"
-              onClick={() => setCommand('把沙发锁定，后面都不要改它')}
-            >
+            <button type="button" onClick={() => setCommand('把沙发锁定，后面都不要改它')}>
               Lock
             </button>
           </div>
@@ -720,14 +262,14 @@ export function App() {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void confirmPendingProposal()}
+                  onClick={() => void actions.confirmPendingProposal()}
                 >
                   确认执行
                 </button>
                 <button
                   type="button"
                   className="secondary"
-                  onClick={() => setPendingProposal(null)}
+                  onClick={() => actions.dismissPendingProposal()}
                 >
                   取消
                 </button>
@@ -740,8 +282,7 @@ export function App() {
               <div className="ai-feedback-head">
                 <strong>{aiFeedback.status}</strong>
                 <span>
-                  {aiFeedback.meta.provider} · {aiFeedback.meta.model} ·{' '}
-                  {aiFeedback.meta.latencyMs}ms
+                  {aiFeedback.meta.provider} · {aiFeedback.meta.model} · {aiFeedback.meta.latencyMs}ms
                 </span>
               </div>
               <span>{aiFeedback.message}</span>
@@ -754,9 +295,7 @@ export function App() {
                   target={aiFeedback.decisions.target.value} (
                   {aiFeedback.decisions.target.confidence.toFixed(2)})
                 </code>
-                <code>
-                  preserve={aiFeedback.decisions.preserveOthers.toFixed(2)}
-                </code>
+                <code>preserve={aiFeedback.decisions.preserveOthers.toFixed(2)}</code>
                 <code>ops={aiFeedback.operations.length}</code>
               </div>
             </div>
@@ -806,8 +345,8 @@ export function App() {
               <div><dt>Catalog SKU</dt><dd>{livingRoomCatalog.length}</dd></div>
               <div><dt>Model Assets</dt><dd>{renderAssetCount}/{livingRoomCatalog.length}</dd></div>
               <div><dt>Design Objects</dt><dd>{objects.length}</dd></div>
-              <div><dt>State Version</dt><dd>{timeline.state.version}</dd></div>
-              <div><dt>Revision</dt><dd>{timeline.past.length}</dd></div>
+              <div><dt>State Version</dt><dd>{designState.version}</dd></div>
+              <div><dt>Revision</dt><dd>{project.revisionCount}</dd></div>
               <div><dt>Room Graph</dt><dd>{graph.edges.length}</dd></div>
               <div><dt>Active Room</dt><dd>{activeRoom.name}</dd></div>
               <div>
@@ -824,9 +363,9 @@ export function App() {
               <button
                 type="button"
                 disabled={busy || !usingImportedModel}
-                onClick={() => activateSpatialModel(sampleApartment)}
+                onClick={() => void actions.switchToSampleSpace()}
               >
-                切回示例空间并重置设计
+                切回示例空间（开启新时间线）
               </button>
             </div>
 
@@ -835,46 +374,46 @@ export function App() {
               <button
                 type="button"
                 disabled={busy || layoutReady}
-                onClick={generateLivingRoom}
+                onClick={() => void actions.generateLayout()}
               >
                 自动布置{activeRoom.name}
               </button>
               <button
                 type="button"
-                disabled={
-                  busy ||
-                  !sofa ||
-                  Boolean(sofa && timeline.state.locks[sofa.id])
-                }
-                onClick={replaceWithCompactSofa}
+                disabled={busy || !sofa || sofaLocked}
+                onClick={() => void actions.replaceWithCompactSofa()}
               >
                 沙发小一点 + 浅灰色
               </button>
               <button
                 type="button"
                 disabled={busy || !sofa}
-                onClick={lockSofa}
+                onClick={() => void actions.toggleSofaLock()}
               >
-                {sofa && timeline.state.locks[sofa.id]
-                  ? '解除沙发锁定'
-                  : '锁定沙发'}
+                {sofaLocked ? '解除沙发锁定' : '锁定沙发'}
               </button>
               <div className="revision-control-row">
                 <button
                   type="button"
-                  disabled={busy || timeline.past.length === 0}
-                  onClick={() => changeTimeline(undoTimeline)}
+                  disabled={busy || !project.canUndo}
+                  onClick={() => void actions.undo()}
                 >
                   Undo
                 </button>
                 <button
                   type="button"
-                  disabled={busy || timeline.future.length === 0}
-                  onClick={() => changeTimeline(redoTimeline)}
+                  disabled={busy || !project.canRedo}
+                  onClick={() => void actions.redo()}
                 >
                   Redo
                 </button>
               </div>
+              {notice ? (
+                <div className="ai-feedback" role="status">
+                  <strong>已同步</strong>
+                  <span>{notice}</span>
+                </div>
+              ) : null}
               {revisionError ? (
                 <div className="ai-feedback ai-feedback-error">
                   <strong>Revision</strong>
@@ -886,13 +425,8 @@ export function App() {
             {plannerFeedback ? (
               <div className="planner-feedback">
                 <strong>Last Plan</strong>
-                <span>候选：{plannerFeedback.diagnostics.candidateCount}</span>
-                <span>
-                  淘汰：{plannerFeedback.diagnostics.rejectedCandidateCount}
-                </span>
                 <span>通过决策：{plannerFeedback.decisions.length}</span>
                 <span>约束问题：{plannerFeedback.violations.length}</span>
-                <span>耗时：{plannerFeedback.diagnostics.elapsedMs}ms</span>
                 {plannerFeedback.violations[0] ? (
                   <code>{plannerFeedback.violations[0].message}</code>
                 ) : null}
@@ -914,9 +448,7 @@ export function App() {
                   const center = polygonCenter(room.boundary)
                   const [labelX, labelY] = projectPoint(center, minX, minZ, scale)
                   const polygonPoints = room.boundary.points
-                    .map((point) =>
-                      projectPoint(point, minX, minZ, scale).join(','),
-                    )
+                    .map((point) => projectPoint(point, minX, minZ, scale).join(','))
                     .join(' ')
 
                   return (
@@ -953,8 +485,8 @@ export function App() {
                   ? 'AI → OPERATIONS → CONSTRAINTS → REAL SCALE'
                   : 'HomeSpatialModel Debug View'}
               </span>
-              <span>HEAD · {timeline.state.headRevisionId ?? 'INITIAL'}</span>
-              <span>{activeRoom.name} · V{timeline.state.version}</span>
+              <span>HEAD · {project.headRevisionId ?? 'INITIAL'}</span>
+              <span>{activeRoom.name} · V{designState.version}</span>
             </div>
           </div>
         </div>

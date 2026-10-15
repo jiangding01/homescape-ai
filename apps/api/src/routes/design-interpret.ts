@@ -1,69 +1,35 @@
+import {
+  DESIGN_INTERPRET_PATH,
+  DesignCommandRequestSchema,
+} from '@homescape/contracts'
 import type {
   DesignCommandInterpreter,
   DesignCommandRequest,
 } from '@homescape/design-intelligence'
 import type { FastifyInstance } from 'fastify'
 
-const shortString = { type: 'string', maxLength: 100 } as const
-
-export const MAX_COMMAND_LENGTH = 500
-export const MAX_CONTEXT_OBJECTS = 100
-
-const interpretBodySchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['requestId', 'command', 'context'],
-  properties: {
-    requestId: { type: 'string', minLength: 1, maxLength: 100 },
-    command: { type: 'string', minLength: 1, maxLength: MAX_COMMAND_LENGTH },
-    context: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['projectId', 'activeRoom', 'objects'],
-      properties: {
-        projectId: shortString,
-        activeRoom: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['id', 'name'],
-          properties: { id: shortString, name: shortString },
-        },
-        objects: {
-          type: 'array',
-          maxItems: MAX_CONTEXT_OBJECTS,
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['id', 'category', 'label', 'locked'],
-            properties: {
-              id: shortString,
-              category: shortString,
-              label: shortString,
-              locked: { type: 'boolean' },
-              roomId: shortString,
-              zoneId: shortString,
-              width: { type: 'number', minimum: 0, maximum: 100000 },
-              colorFamily: shortString,
-            },
-          },
-        },
-      },
-    },
-  },
-} as const
-
+// 长度 / 数量上限与多余字段拒绝由契约包 DesignCommandRequestSchema 定义，前后端共用。
 export function registerDesignInterpretRoute(
   server: FastifyInstance,
   interpreter: DesignCommandInterpreter | undefined,
   rateLimit: { max: number; timeWindow: string | number },
 ) {
-  server.post<{ Body: DesignCommandRequest }>(
-    '/api/design/interpret',
-    {
-      schema: { body: interpretBodySchema },
-      config: { rateLimit },
-    },
+  server.post(
+    DESIGN_INTERPRET_PATH,
+    { config: { rateLimit } },
     async (request, reply) => {
+      // 先校验请求再判断服务是否启用，与迁移前的行为保持一致。
+      const parsed = DesignCommandRequestSchema.safeParse(request.body)
+
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: {
+            code: 'INVALID_DESIGN_COMMAND',
+            message: '设计指令或上下文格式无效，或超出长度/数量上限。',
+          },
+        })
+      }
+
       if (!interpreter) {
         return reply.code(503).send({
           error: {
@@ -73,30 +39,10 @@ export function registerDesignInterpretRoute(
         })
       }
 
-      const body = request.body
-
-      if (
-        !body ||
-        typeof body.requestId !== 'string' ||
-        !body.requestId.trim() ||
-        typeof body.command !== 'string' ||
-        !body.command.trim() ||
-        !body.context ||
-        typeof body.context.projectId !== 'string' ||
-        !body.context.activeRoom ||
-        typeof body.context.activeRoom.id !== 'string' ||
-        !Array.isArray(body.context.objects)
-      ) {
-        return reply.code(400).send({
-          error: {
-            code: 'INVALID_DESIGN_COMMAND',
-            message: '设计指令或上下文格式无效。',
-          },
-        })
-      }
-
       try {
-        return await interpreter.interpret(body)
+        // zod 对可选字段推断为 `?: T | undefined`，解析结果中缺省的键不会被补上，
+        // 与 exactOptionalPropertyTypes 下的领域类型在运行时一致。
+        return await interpreter.interpret(parsed.data as DesignCommandRequest)
       } catch (error) {
         request.log.error({ err: error }, '自然语言设计指令解析失败')
 

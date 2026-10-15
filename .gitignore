@@ -12,3 +12,4 @@ coverage
 !.env.example
 *.local
 *.log
+apps/api/.data

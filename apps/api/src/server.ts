@@ -1,9 +1,17 @@
 import rateLimit from '@fastify/rate-limit'
+import { InMemoryCatalog, livingRoomCatalog } from '@homescape/catalog'
 import type { DesignCommandInterpreter } from '@homescape/design-intelligence'
+import { RuleBasedPlanner, type SpatialPlanner } from '@homescape/planner'
 import Fastify, { type FastifyError } from 'fastify'
 import { createDesignCommandInterpreterFromEnv } from './ai'
+import { ApiHttpError } from './errors'
+import type { IdGenerator } from './ids'
 import { registerDesignInterpretRoute } from './routes/design-interpret'
 import { registerHealthRoute } from './routes/health'
+import { registerProjectRoutes } from './routes/projects'
+import { ProjectService } from './services/project-service'
+import { IN_MEMORY_DATABASE, openSqliteDesignStore } from './storage/sqlite-store'
+import type { DesignStore } from './storage/types'
 
 export const REQUEST_BODY_LIMIT_BYTES = 64 * 1024
 
@@ -12,6 +20,12 @@ export interface BuildServerOptions {
   interpreter?: DesignCommandInterpreter | undefined
   logger?: boolean
   rateLimit?: { max: number; timeWindow: string | number }
+  /** 外部传入的存储由调用方负责关闭；否则按 databasePath 打开并在 server 关闭时关闭。 */
+  store?: DesignStore
+  /** SQLite 文件路径，缺省为内存库（生产入口 index.ts 负责解析默认文件路径）。 */
+  databasePath?: string
+  planner?: SpatialPlanner
+  createId?: IdGenerator
 }
 
 export function buildServer(options: BuildServerOptions = {}) {
@@ -26,7 +40,25 @@ export function buildServer(options: BuildServerOptions = {}) {
       ? options.interpreter
       : createDesignCommandInterpreterFromEnv()
 
+  const ownsStore = !options.store
+  const store = options.store ?? openSqliteDesignStore(options.databasePath ?? IN_MEMORY_DATABASE)
+
+  if (ownsStore) {
+    server.addHook('onClose', async () => store.close())
+  }
+
+  const projectService = new ProjectService({
+    store,
+    planner: options.planner ?? new RuleBasedPlanner(new InMemoryCatalog(livingRoomCatalog)),
+    ...(options.createId ? { createId: options.createId } : {}),
+  })
+  projectService.ensureSampleProject()
+
   server.setErrorHandler((error: FastifyError, request, reply) => {
+    if (error instanceof ApiHttpError) {
+      return reply.code(error.statusCode).send(error.toResponse())
+    }
+
     if (error.validation) {
       return reply.code(400).send({
         error: {
@@ -76,6 +108,7 @@ export function buildServer(options: BuildServerOptions = {}) {
       designCommandInterpreter,
       options.rateLimit ?? { max: 20, timeWindow: '1 minute' },
     )
+    registerProjectRoutes(instance, projectService)
   })
 
   return server

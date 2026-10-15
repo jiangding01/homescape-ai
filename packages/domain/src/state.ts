@@ -103,11 +103,14 @@ function objectsToRecord(values: readonly DesignObject[]) {
   return record
 }
 
+/** 当前 DesignState 结构版本；持久化读取时经迁移注册表升级到此版本。 */
+export const DESIGN_STATE_SCHEMA_VERSION = '0.1.0'
+
 export function createInitialDesignState(
   input: CreateInitialDesignStateInput,
 ): DesignState {
   return {
-    schemaVersion: '0.1.0',
+    schemaVersion: DESIGN_STATE_SCHEMA_VERSION,
     projectId: input.projectId,
     spatialModelId: input.spatialModelId,
     version: 0,

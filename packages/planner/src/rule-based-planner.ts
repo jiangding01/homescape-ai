@@ -43,6 +43,7 @@ import type {
   PlannerResult,
   SpatialPlanner,
 } from './types'
+import { defaultCreateObjectId } from './types'
 
 interface PlacementRegion {
   floor: Floor
@@ -417,6 +418,7 @@ export class RuleBasedPlanner implements SpatialPlanner {
 
   async plan(input: PlannerInput): Promise<PlannerResult> {
     const startedAt = Date.now()
+    const createObjectId = input.createObjectId ?? defaultCreateObjectId
     const mutations: ResolvedDesignMutation[] = []
     const violations: ConstraintViolation[] = []
     const decisions: PlannerDecision[] = []
@@ -535,7 +537,7 @@ export class RuleBasedPlanner implements SpatialPlanner {
           continue
         }
 
-        const objectId = 'object-' + operation.id
+        const objectId = createObjectId(operation)
         const object = createDesignObject(
           objectId,
           operation.category,

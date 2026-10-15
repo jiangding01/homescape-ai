@@ -593,3 +593,90 @@ export function replayRevisions(
 
   return state
 }
+
+/**
+ * 由只追加的 Revision 日志推导撤销 / 重做栈（与 commitToTimeline / undoTimeline / redoTimeline
+ * 的栈语义一致），因此持久化时只需保存日志，无需单独存储 past / future。
+ * 日志中 undo / redo 的目标与栈顶不一致时抛 RevisionConflictError。
+ */
+export function deriveUndoRedoStacks(log: readonly DesignRevision[]) {
+  const past: DesignRevision[] = []
+  let future: DesignRevision[] = []
+
+  for (const revision of log) {
+    if (revision.kind === 'commit') {
+      past.push(revision)
+      future = []
+      continue
+    }
+
+    if (revision.kind === 'undo') {
+      const target = past[past.length - 1]
+
+      if (!target || target.id !== revision.targetRevisionId) {
+        throw new RevisionConflictError(
+          'Undo Revision 的目标与撤销栈不一致：' + revision.id,
+        )
+      }
+
+      past.pop()
+      future = [target, ...future]
+      continue
+    }
+
+    const target = future[0]
+
+    if (!target || target.id !== revision.targetRevisionId) {
+      throw new RevisionConflictError(
+        'Redo Revision 的目标与重做栈不一致：' + revision.id,
+      )
+    }
+
+    future = future.slice(1)
+    past.push(target)
+  }
+
+  return { past, future }
+}
+
+export interface RestoreRevisionTimelineOptions {
+  /**
+   * 日志末尾的状态快照。提供时直接采用（须与日志 head / version 一致），
+   * 否则由 initialState 重放日志得到。
+   */
+  headState?: DesignState
+}
+
+/** 由初始状态 + 完整 Revision 日志恢复 RevisionTimeline（持久化后的读取路径）。 */
+export function restoreRevisionTimeline(
+  initialState: DesignState,
+  log: readonly DesignRevision[],
+  options: RestoreRevisionTimelineOptions = {},
+): RevisionTimeline {
+  const { past, future } = deriveUndoRedoStacks(log)
+  let state: DesignState
+
+  if (options.headState) {
+    const last = log[log.length - 1]
+    const expectedHead = last ? last.id : (initialState.headRevisionId ?? null)
+    const expectedVersion = last ? last.stateVersionAfter : initialState.version
+
+    if (
+      (options.headState.headRevisionId ?? null) !== expectedHead ||
+      options.headState.version !== expectedVersion
+    ) {
+      throw new RevisionConflictError('状态快照与 Revision 日志不一致')
+    }
+
+    state = cloneState(options.headState)
+  } else {
+    state = replayRevisions(initialState, log)
+  }
+
+  return {
+    state,
+    log: [...log],
+    past,
+    future,
+  }
+}
