@@ -107,23 +107,30 @@ describe('沿墙候选方向', () => {
     const longLength = Math.hypot(longAxis[0]!, longAxis[1]!)
     expect(longLength).toBeCloseTo(width, 10)
 
-    const walls = spatialModel.floors[0]!.walls
-    const parallelWall = walls.find((wall) => {
-      const dx = wall.end[0] - wall.start[0]
-      const dz = wall.end[1] - wall.start[1]
+    // 房间边界即墙体内表面：找到与长轴平行的那条边。
+    const points = spatialModel.floors[0]!.rooms[0]!.boundary.points
+    const edges = points.map((start, index) => [start, points[(index + 1) % points.length]!] as const)
+    const parallelEdge = edges.find(([start, end]) => {
+      const dx = end[0] - start[0]
+      const dz = end[1] - start[1]
       const cross = (longAxis[0]! * dz - longAxis[1]! * dx) / (longLength * Math.hypot(dx, dz))
-      return Math.abs(cross) < 1e-9
+      const distance =
+        Math.abs(
+          (object.transform.position[0] - start[0]) * dz -
+            (object.transform.position[2] - start[1]) * dx,
+        ) / Math.hypot(dx, dz)
+      return Math.abs(cross) < 1e-9 && distance < 1
     })
-    expect(parallelWall).toBeDefined()
+    expect(parallelEdge).toBeDefined()
 
-    // 并且家具紧贴该墙：中心到墙线的距离 = 半深度 + wallClearance。
-    const wall = parallelWall!
-    const dx = wall.end[0] - wall.start[0]
-    const dz = wall.end[1] - wall.start[1]
+    // 并且家具紧贴该内表面：中心到边的距离 = 半深度 + wallClearance（不再扣墙厚）。
+    const [start, end] = parallelEdge!
+    const dx = end[0] - start[0]
+    const dz = end[1] - start[1]
     const distanceToWall =
       Math.abs(
-        (object.transform.position[0] - wall.start[0]) * dz -
-          (object.transform.position[2] - wall.start[1]) * dx,
+        (object.transform.position[0] - start[0]) * dz -
+          (object.transform.position[2] - start[1]) * dx,
       ) / Math.hypot(dx, dz)
     expect(distanceToWall).toBeCloseTo(depth / 2 + 0.05, 9)
   })

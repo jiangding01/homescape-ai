@@ -4,6 +4,7 @@ import type {
   SpatialUnresolvedIssue,
 } from './importer'
 import { validateHomeSpatialModel } from './validation'
+import { withWallThickness } from './wall-inference'
 
 export interface SpatialReviewResolution {
   issueId: string
@@ -67,6 +68,7 @@ function cloneModel(model: HomeSpatialModel): HomeSpatialModel {
         ...wall,
         start: [...wall.start] as typeof wall.start,
         end: [...wall.end] as typeof wall.end,
+        ...(wall.sides ? { sides: [{ ...wall.sides[0] }, { ...wall.sides[1] }] as const } : {}),
       })),
       openings: floor.openings.map((opening) => ({ ...opening })),
       structuralElements: floor.structuralElements.map((element) => ({
@@ -160,12 +162,13 @@ export function applySpatialCorrection(
     let updated = 0
 
     for (const floor of model.floors) {
-      for (const wall of floor.walls) {
-        if (!targetIds.has(wall.id)) continue
+      floor.walls = floor.walls.map((wall) => {
+        if (!targetIds.has(wall.id)) return wall
 
-        wall.thickness = correction.thicknessMeters
         updated += 1
-      }
+        // 外墙保持内表面不动，中心线随厚度平移。
+        return withWallThickness(wall, correction.thicknessMeters)
+      })
     }
 
     if (updated !== targetIds.size) {

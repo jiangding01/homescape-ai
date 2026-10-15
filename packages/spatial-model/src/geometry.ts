@@ -39,6 +39,27 @@ export function yawFromDirection(dx: number, dz: number) {
   return -Math.atan2(dz, dx)
 }
 
+/**
+ * 家具“正面”约定：资产局部 −Z 轴（靠背 / 背板位于局部 +Z）。
+ *
+ * 依据：仓库内已标准化的 Demo 资产（apps/web/public/assets/catalog/*.gltf，
+ * meter / right-handed-y-up / floor-center pivot，见 ADR-0011）中沙发的 Back 节点
+ * 均位于局部 +Z（约 +0.37 m），坐垫略偏 −Z；渲染器启用 `useRightHandedSystem`，
+ * Babylon glTF 加载器在右手系下不再对根节点做 Z 翻转，因此 glTF 局部轴即渲染局部轴。
+ * 注意这与 glTF 规范“资产正面朝 +Z”的建议相反，接入生产资产时须按本约定标准化。
+ */
+export const FURNITURE_FRONT_LOCAL_AXIS: Vec2 = [0, -1]
+
+/**
+ * 返回让家具正面（局部 −Z）朝向世界方向 (nx, nz) 的 yaw；此时局部 +X（宽度方向）
+ * 与 (nx, nz) 垂直。对逆时针房间边 d，传入其内法线 (dz, −dx) 得到的 yaw 等于
+ * `yawFromDirection(dx, dz)`。
+ */
+export function yawFacingDirection(nx: number, nz: number) {
+  // rotateLocalToWorld(0, 1, yaw) = (sin yaw, cos yaw) 应指向 −(nx, nz)。
+  return Math.atan2(-nx, -nz)
+}
+
 export function distance2D(a: Vec2, b: Vec2) {
   return Math.hypot(b[0] - a[0], b[1] - a[1])
 }

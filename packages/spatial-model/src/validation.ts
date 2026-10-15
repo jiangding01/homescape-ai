@@ -1,13 +1,15 @@
-import { distance2D, polygonArea } from './geometry'
-import type {
-  Floor,
-  HomeSpatialModel,
-  Opening,
-  Room,
-  SpatialEntity,
-  SpatialId,
-  Wall,
+import { distance2D, polygonArea, type Polygon2D, type Vec2 } from './geometry'
+import {
+  EXTERIOR_SPACE_ID,
+  type Floor,
+  type HomeSpatialModel,
+  type Opening,
+  type Room,
+  type SpatialEntity,
+  type SpatialId,
+  type Wall,
 } from './model'
+import { polygonWinding } from './polygon-ops'
 
 export type SpatialValidationSeverity = 'warning' | 'error'
 
@@ -25,9 +27,37 @@ export interface SpatialValidationResult {
 }
 
 const EPSILON = 0.001
+/** 房间边上允许未被墙段覆盖的最长连续长度（米），吸收端点误差产生的碎片 */
+export const WALL_COVERAGE_TOLERANCE = 0.06
+/** 旧数据（无 sides）按几何判断覆盖时的角度容差 */
+const COVERAGE_ANGLE_TOLERANCE = Math.sin((3 * Math.PI) / 180)
+/** 旧数据按几何判断覆盖时，边到墙中心线的距离可超出半墙厚的余量（米） */
+const COVERAGE_DISTANCE_TOLERANCE = 0.03
 
 function finite(value: number) {
   return Number.isFinite(value)
+}
+
+function finitePoint(point: readonly number[]) {
+  return point.every((value) => Number.isFinite(value))
+}
+
+function finitePolygon(polygon: Polygon2D) {
+  return polygon.points.every(finitePoint)
+}
+
+function nonFiniteIssue(path: string, entityId: SpatialId): SpatialValidationIssue {
+  return {
+    code: 'geometry.non_finite',
+    severity: 'error',
+    path,
+    message: '坐标或尺寸必须为有限数',
+    entityId,
+  }
+}
+
+function wallIsFinite(wall: Wall) {
+  return finitePoint(wall.start) && finitePoint(wall.end)
 }
 
 function validateProvenance(
@@ -37,7 +67,7 @@ function validateProvenance(
 ) {
   const confidence = entity.provenance?.confidence
 
-  if (confidence !== undefined && (confidence < 0 || confidence > 1)) {
+  if (confidence !== undefined && !(confidence >= 0 && confidence <= 1)) {
     issues.push({
       code: 'provenance.confidence.out_of_range',
       severity: 'error',
@@ -48,10 +78,17 @@ function validateProvenance(
   }
 }
 
-function validateWall(wall: Wall, path: string, issues: SpatialValidationIssue[]) {
+function validateWall(
+  wall: Wall,
+  path: string,
+  roomMap: Map<SpatialId, Room>,
+  issues: SpatialValidationIssue[],
+) {
   validateProvenance(wall, path, issues)
 
-  if (distance2D(wall.start, wall.end) <= EPSILON) {
+  if (!wallIsFinite(wall)) {
+    issues.push(nonFiniteIssue(path, wall.id))
+  } else if (distance2D(wall.start, wall.end) <= EPSILON) {
     issues.push({
       code: 'wall.zero_length',
       severity: 'error',
@@ -80,6 +117,43 @@ function validateWall(wall: Wall, path: string, issues: SpatialValidationIssue[]
       entityId: wall.id,
     })
   }
+
+  wall.sides?.forEach((side, sideIndex) => {
+    if (side.kind !== 'room') return
+
+    const sidePath = path + '.sides[' + sideIndex + ']'
+    const room = roomMap.get(side.roomId)
+    const points = room?.boundary.points ?? []
+    const edgeStart = points[side.edgeIndex]
+    const edgeEnd = points[(side.edgeIndex + 1) % Math.max(points.length, 1)]
+
+    if (!room || !Number.isInteger(side.edgeIndex) || !edgeStart || !edgeEnd) {
+      issues.push({
+        code: 'wall.side_room_edge_missing',
+        severity: 'error',
+        path: sidePath,
+        message: '墙体引用的房间或房间边不存在',
+        entityId: wall.id,
+      })
+      return
+    }
+
+    if (
+      !finite(side.edgeStart) ||
+      !finite(side.edgeEnd) ||
+      side.edgeStart < -EPSILON ||
+      side.edgeEnd <= side.edgeStart ||
+      side.edgeEnd > distance2D(edgeStart, edgeEnd) + EPSILON
+    ) {
+      issues.push({
+        code: 'wall.side_interval_invalid',
+        severity: 'error',
+        path: sidePath,
+        message: '墙体在房间边上的区间无效',
+        entityId: wall.id,
+      })
+    }
+  })
 }
 
 function validateOpening(
@@ -102,6 +176,8 @@ function validateOpening(
     })
     return
   }
+
+  if (!wallIsFinite(wall)) return
 
   if (
     !finite(opening.offset) ||
@@ -131,7 +207,7 @@ function validateOpening(
     })
   }
 
-  if (opening.sillHeight !== undefined && opening.sillHeight < 0) {
+  if (opening.sillHeight !== undefined && !(opening.sillHeight >= 0)) {
     issues.push({
       code: 'opening.invalid_sill_height',
       severity: 'error',
@@ -139,6 +215,100 @@ function validateOpening(
       message: '窗台高度不能为负数',
       entityId: opening.id,
     })
+  }
+}
+
+interface Interval {
+  from: number
+  to: number
+}
+
+/** 旧数据（墙无 sides）：按几何判断墙中心线是否沿该边、距离不超过半墙厚加余量 */
+function geometricCoverage(start: Vec2, end: Vec2, wall: Wall): Interval | undefined {
+  const dx = end[0] - start[0]
+  const dz = end[1] - start[1]
+  const length = Math.hypot(dx, dz)
+  const wx = wall.end[0] - wall.start[0]
+  const wz = wall.end[1] - wall.start[1]
+  const wallLength = Math.hypot(wx, wz)
+
+  if (length === 0 || wallLength === 0) return undefined
+  if (Math.abs(dx * wz - dz * wx) / (length * wallLength) > COVERAGE_ANGLE_TOLERANCE) {
+    return undefined
+  }
+
+  const ux = dx / length
+  const uz = dz / length
+  const maxDistance = wall.thickness / 2 + COVERAGE_DISTANCE_TOLERANCE
+  const project = (point: Vec2) => ({
+    along: (point[0] - start[0]) * ux + (point[1] - start[1]) * uz,
+    across: Math.abs((point[0] - start[0]) * uz - (point[1] - start[1]) * ux),
+  })
+  const a = project(wall.start)
+  const b = project(wall.end)
+
+  if (a.across > maxDistance || b.across > maxDistance) return undefined
+
+  const from = Math.max(0, Math.min(a.along, b.along))
+  const to = Math.min(length, Math.max(a.along, b.along))
+
+  return to > from ? { from, to } : undefined
+}
+
+/**
+ * 每条房间边都必须被墙段覆盖（ADR 0018）。有 sides 的墙按其记录的边区间计算；
+ * 旧数据按几何判断。允许不超过 WALL_COVERAGE_TOLERANCE 的连续缺口。
+ */
+function validateRoomWallCoverage(
+  room: Room,
+  walls: Wall[],
+  path: string,
+  issues: SpatialValidationIssue[],
+) {
+  const points = room.boundary.points
+
+  for (let edgeIndex = 0; edgeIndex < points.length; edgeIndex += 1) {
+    const start = points[edgeIndex]!
+    const end = points[(edgeIndex + 1) % points.length]!
+    const length = distance2D(start, end)
+    const intervals: Interval[] = []
+
+    for (const wall of walls) {
+      if (!wallIsFinite(wall)) continue
+
+      if (wall.sides) {
+        for (const side of wall.sides) {
+          if (side.kind === 'room' && side.roomId === room.id && side.edgeIndex === edgeIndex) {
+            intervals.push({ from: side.edgeStart, to: side.edgeEnd })
+          }
+        }
+      } else {
+        const covered = geometricCoverage(start, end, wall)
+        if (covered) intervals.push(covered)
+      }
+    }
+
+    intervals.sort((a, b) => a.from - b.from)
+
+    let cursor = 0
+    let largestGap = 0
+
+    for (const interval of intervals) {
+      largestGap = Math.max(largestGap, interval.from - cursor)
+      cursor = Math.max(cursor, interval.to)
+    }
+
+    largestGap = Math.max(largestGap, length - cursor)
+
+    if (largestGap > WALL_COVERAGE_TOLERANCE) {
+      issues.push({
+        code: 'room.edge_uncovered',
+        severity: 'error',
+        path: path + '.boundary.points[' + edgeIndex + ']',
+        message: '房间第 ' + edgeIndex + ' 条边有 ' + largestGap.toFixed(3) + 'm 未被墙段覆盖',
+        entityId: room.id,
+      })
+    }
   }
 }
 
@@ -152,7 +322,19 @@ function validateRoom(
 ) {
   validateProvenance(room, path, issues)
 
-  if (room.boundary.points.length < 3 || polygonArea(room.boundary) <= EPSILON) {
+  if (room.id === EXTERIOR_SPACE_ID) {
+    issues.push({
+      code: 'room.reserved_id',
+      severity: 'error',
+      path: path + '.id',
+      message: '房间 ID 不能使用室外保留值 ' + EXTERIOR_SPACE_ID,
+      entityId: room.id,
+    })
+  }
+
+  if (!finitePolygon(room.boundary)) {
+    issues.push(nonFiniteIssue(path + '.boundary', room.id))
+  } else if (room.boundary.points.length < 3 || polygonArea(room.boundary) <= EPSILON) {
     issues.push({
       code: 'room.invalid_boundary',
       severity: 'error',
@@ -160,6 +342,18 @@ function validateRoom(
       message: '房间边界必须是面积大于 0 的多边形',
       entityId: room.id,
     })
+  } else {
+    if (polygonWinding(room.boundary) !== 'ccw') {
+      issues.push({
+        code: 'room.winding',
+        severity: 'error',
+        path: path + '.boundary',
+        message: '房间边界必须为从 +Y 俯视逆时针绕向',
+        entityId: room.id,
+      })
+    }
+
+    validateRoomWallCoverage(room, floor.walls, path, issues)
   }
 
   if (!finite(room.ceilingHeight) || room.ceilingHeight <= 0) {
@@ -200,7 +394,9 @@ function validateRoom(
     const zonePath = path + '.zones[' + zoneIndex + ']'
     validateProvenance(zone, zonePath, issues)
 
-    if (zone.boundary.points.length < 3 || polygonArea(zone.boundary) <= EPSILON) {
+    if (!finitePolygon(zone.boundary)) {
+      issues.push(nonFiniteIssue(zonePath + '.boundary', zone.id))
+    } else if (zone.boundary.points.length < 3 || polygonArea(zone.boundary) <= EPSILON) {
       issues.push({
         code: 'zone.invalid_boundary',
         severity: 'error',
@@ -291,7 +487,7 @@ export function validateHomeSpatialModel(model: HomeSpatialModel): SpatialValida
 
   if (model.provenance?.confidence !== undefined) {
     const confidence = model.provenance.confidence
-    if (confidence < 0 || confidence > 1) {
+    if (!(confidence >= 0 && confidence <= 1)) {
       issues.push({
         code: 'model.confidence.out_of_range',
         severity: 'error',
@@ -312,7 +508,7 @@ export function validateHomeSpatialModel(model: HomeSpatialModel): SpatialValida
     const roomMap = new Map(floor.rooms.map((room) => [room.id, room]))
 
     floor.walls.forEach((wall, index) =>
-      validateWall(wall, floorPath + '.walls[' + index + ']', issues),
+      validateWall(wall, floorPath + '.walls[' + index + ']', roomMap, issues),
     )
     floor.openings.forEach((opening, index) =>
       validateOpening(opening, wallMap, floorPath + '.openings[' + index + ']', issues),
@@ -332,7 +528,21 @@ export function validateHomeSpatialModel(model: HomeSpatialModel): SpatialValida
       const path = floorPath + '.structuralElements[' + index + ']'
       validateProvenance(element, path, issues)
 
-      if (element.kind === 'column') {
+      const elementFinite =
+        element.kind === 'column'
+          ? finitePoint(element.center) &&
+            finitePoint(element.size) &&
+            finite(element.height) &&
+            finite(element.rotation)
+          : finitePoint(element.start) &&
+            finitePoint(element.end) &&
+            finite(element.width) &&
+            finite(element.height) &&
+            finite(element.bottomElevation)
+
+      if (!elementFinite) {
+        issues.push(nonFiniteIssue(path, element.id))
+      } else if (element.kind === 'column') {
         if (element.size[0] <= 0 || element.size[1] <= 0 || element.height <= 0) {
           issues.push({
             code: 'structure.invalid_column',
@@ -361,6 +571,10 @@ export function validateHomeSpatialModel(model: HomeSpatialModel): SpatialValida
       const path = floorPath + '.utilityAnchors[' + index + ']'
       validateProvenance(anchor, path, issues)
 
+      if (!finitePoint(anchor.position)) {
+        issues.push(nonFiniteIssue(path + '.position', anchor.id))
+      }
+
       if (anchor.roomId && !roomMap.has(anchor.roomId)) {
         issues.push({
           code: 'utility.room_missing',
@@ -376,7 +590,11 @@ export function validateHomeSpatialModel(model: HomeSpatialModel): SpatialValida
       const path = floorPath + '.connections[' + index + ']'
       validateProvenance(connection, path, issues)
 
-      if (!roomMap.has(connection.fromRoomId) || !roomMap.has(connection.toRoomId)) {
+      // toRoomId 可为 EXTERIOR_SPACE_ID（连接到室外），fromRoomId 必须是房间。
+      if (
+        !roomMap.has(connection.fromRoomId) ||
+        (connection.toRoomId !== EXTERIOR_SPACE_ID && !roomMap.has(connection.toRoomId))
+      ) {
         issues.push({
           code: 'connection.room_missing',
           severity: 'error',

@@ -1,5 +1,6 @@
 import {
-  isPointInPolygon,
+  isPolygonInsidePolygon,
+  polygonBounds,
   rotateLocalToWorld,
   type Polygon2D,
   type Vec2,
@@ -13,6 +14,8 @@ export interface Footprint2D {
 }
 
 const EPSILON = 1e-7
+/** 占位超出房间的面积容差（平方米），只吸收浮点误差 */
+const INSIDE_AREA_TOLERANCE = 1e-6
 
 // 旋转约定统一由 spatial-model 的 rotateLocalToWorld 定义（与渲染器一致）。
 function rotatePoint(localX: number, localZ: number, yaw: number, center: Vec2): Vec2 {
@@ -33,58 +36,31 @@ export function footprintCorners(footprint: Footprint2D): readonly Vec2[] {
   ]
 }
 
-function pointOnSegment(point: Vec2, start: Vec2, end: Vec2) {
-  const cross =
-    (point[0] - start[0]) * (end[1] - start[1]) -
-    (point[1] - start[1]) * (end[0] - start[0])
-
-  if (Math.abs(cross) > EPSILON) return false
-
-  const dot =
-    (point[0] - start[0]) * (end[0] - start[0]) +
-    (point[1] - start[1]) * (end[1] - start[1])
-
-  if (dot < -EPSILON) return false
-
-  const squaredLength =
-    (end[0] - start[0]) ** 2 + (end[1] - start[1]) ** 2
-
-  return dot <= squaredLength + EPSILON
+export function footprintPolygon(footprint: Footprint2D): Polygon2D {
+  return { points: [...footprintCorners(footprint)] }
 }
 
-function pointInsideOrOnPolygon(point: Vec2, polygon: Polygon2D) {
-  for (let index = 0; index < polygon.points.length; index += 1) {
-    const start = polygon.points[index]
-    const end = polygon.points[(index + 1) % polygon.points.length]
-
-    if (start && end && pointOnSegment(point, start, end)) return true
-  }
-
-  return isPointInPolygon(point, polygon)
-}
-
+/**
+ * 占位是否完全落在多边形内（ADR 0018）：占位减去多边形后的面积近似为零。
+ * 与只检查角点 / 边中点的旧实现不同，它能识别 L 形房间内凹角伸入占位的情况。
+ */
 export function footprintInsidePolygon(footprint: Footprint2D, polygon: Polygon2D) {
   const corners = footprintCorners(footprint)
+  const bounds = polygonBounds(polygon)
 
-  if (!corners.every((corner) => pointInsideOrOnPolygon(corner, polygon))) {
-    return false
+  // 包围盒快速排除，避免对明显越界的候选做多边形裁剪。
+  for (const [x, z] of corners) {
+    if (
+      x < bounds.min[0] - EPSILON ||
+      x > bounds.max[0] + EPSILON ||
+      z < bounds.min[1] - EPSILON ||
+      z > bounds.max[1] + EPSILON
+    ) {
+      return false
+    }
   }
 
-  for (let index = 0; index < corners.length; index += 1) {
-    const current = corners[index]
-    const next = corners[(index + 1) % corners.length]
-
-    if (!current || !next) continue
-
-    const midpoint: Vec2 = [
-      (current[0] + next[0]) / 2,
-      (current[1] + next[1]) / 2,
-    ]
-
-    if (!pointInsideOrOnPolygon(midpoint, polygon)) return false
-  }
-
-  return true
+  return isPolygonInsidePolygon({ points: [...corners] }, polygon, INSIDE_AREA_TOLERANCE)
 }
 
 function axesFor(corners: readonly Vec2[]) {

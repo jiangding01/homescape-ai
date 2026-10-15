@@ -32,6 +32,8 @@ import {
 } from '@homescape/spatial-model'
 import { triangulateSimplePolygon } from './triangulate'
 
+const DEFAULT_CAMERA_ALPHA = Math.PI / 2.2
+
 interface RendererMaterials {
   floor: StandardMaterial
   wall: StandardMaterial
@@ -87,9 +89,11 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
     scene.useRightHandedSystem = true
     scene.clearColor = new Color4(0.965, 0.953, 0.925, 1)
 
+    // 相机位于 +Z 一侧向 −Z 看（右手系下屏幕右为 +X、远处为 −Z），与俯视平面图 /
+    // 导入原图的方位一致（原图下方离相机近），只是带俯仰角。
     const camera = new ArcRotateCamera(
       'homescape-camera',
-      -Math.PI / 2.2,
+      DEFAULT_CAMERA_ALPHA,
       Math.PI / 3.1,
       14,
       new Vector3(5, 0.8, 4),
@@ -111,10 +115,11 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
 
     const sun = new DirectionalLight(
       'homescape-sun',
-      new Vector3(-0.45, -1, 0.35),
+      // z 分量与相机所在一侧相反，使朝向相机的墙面受光（相机位于 +Z 一侧）。
+      new Vector3(-0.45, -1, -0.35),
       scene,
     )
-    sun.position = new Vector3(8, 12, -6)
+    sun.position = new Vector3(8, 12, 6)
     sun.intensity = 0.55
 
     const floorMaterial = new StandardMaterial('homescape-floor-material', scene)
@@ -651,6 +656,16 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
       0,
       wall.height,
     )
+
+    // 墙体按推导出的中心线与厚度绘制（ADR 0018）。外墙由推导延伸到外角已封闭；
+    // 两侧都是房间的墙只覆盖两条内表面的重叠段，在 T 型 / 十字接头处会留下
+    // 墙厚见方的空洞，这里在两端各补半个墙厚的端帽（落入相邻墙体内部，不改变开口偏移）。
+    if (wall.thicknessSource === 'paired' || wall.thicknessSource === 'coincident') {
+      const cap = wall.thickness / 2
+
+      createPiece('wall-' + wall.id + '-cap-start', -cap, cap, 0, wall.height)
+      createPiece('wall-' + wall.id + '-cap-end', length, cap, 0, wall.height)
+    }
   }
 
   private createPolygonMesh(
@@ -711,7 +726,7 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
         (minZ + maxZ) / 2,
       ),
     )
-    camera.alpha = -Math.PI / 2.2
+    camera.alpha = DEFAULT_CAMERA_ALPHA
     camera.beta = Math.PI / 3.1
     camera.radius = Math.max(width, depth) * margin + 2
   }

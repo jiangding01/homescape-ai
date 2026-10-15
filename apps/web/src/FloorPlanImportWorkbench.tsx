@@ -36,16 +36,17 @@ const roomTypeOptions: Array<{ value: RoomType; label: string }> = [
   { value: 'other', label: '其他' },
 ]
 
+/** 从 +Y 俯视绘制：屏幕右为 +X、屏幕下为 +Z，与导入原图方向一致（不翻转 z）。 */
 function projectPoint(
   point: Vec2,
   minX: number,
-  maxZ: number,
+  minZ: number,
   scale: number,
   padding: number,
 ) {
   return [
     (point[0] - minX) * scale + padding,
-    (maxZ - point[1]) * scale + padding,
+    (point[1] - minZ) * scale + padding,
   ] as const
 }
 
@@ -172,7 +173,7 @@ export function FloorPlanImportWorkbench({
     return {
       floor,
       minX,
-      maxZ,
+      minZ,
       scale,
       padding,
       width: (maxX - minX) * scale + padding * 2,
@@ -346,7 +347,7 @@ export function FloorPlanImportWorkbench({
                   const [labelX, labelY] = projectPoint(
                     center,
                     preview.minX,
-                    preview.maxZ,
+                    preview.minZ,
                     preview.scale,
                     preview.padding,
                   )
@@ -355,7 +356,7 @@ export function FloorPlanImportWorkbench({
                       projectPoint(
                         point,
                         preview.minX,
-                        preview.maxZ,
+                        preview.minZ,
                         preview.scale,
                         preview.padding,
                       ).join(','),
@@ -383,14 +384,14 @@ export function FloorPlanImportWorkbench({
                   const [x1, y1] = projectPoint(
                     wall.start,
                     preview.minX,
-                    preview.maxZ,
+                    preview.minZ,
                     preview.scale,
                     preview.padding,
                   )
                   const [x2, y2] = projectPoint(
                     wall.end,
                     preview.minX,
-                    preview.maxZ,
+                    preview.minZ,
                     preview.scale,
                     preview.padding,
                   )

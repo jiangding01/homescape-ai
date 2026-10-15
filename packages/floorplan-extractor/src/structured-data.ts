@@ -36,6 +36,11 @@ export interface MetricStructuredFloorPlanOpening {
   confidence?: number
 }
 
+/**
+ * Coordinates follow the CAD convention: origin at the canvas bottom-left,
+ * x to the right, y upward (meters). The adapter flips y into image pixel
+ * space (y downward), which the importer then maps directly to world +z.
+ */
 export interface MetricStructuredFloorPlanV01 {
   schemaVersion: '0.1.0'
   sourceLabel: string

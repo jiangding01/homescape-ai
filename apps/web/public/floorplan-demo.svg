@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="840" viewBox="0 0 1080 840">
   <rect width="1080" height="840" fill="#f8f6f0"/>
-  <g fill="none" stroke="#20231f" stroke-width="10" stroke-linejoin="round">
+  <g fill="none" stroke="#20231f" stroke-width="12" stroke-linejoin="round">
     <path d="M80 120H1000V760H80Z"/>
     <path d="M420 120V420"/>
     <path d="M680 120V760"/>
