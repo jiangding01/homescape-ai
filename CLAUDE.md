@@ -17,7 +17,7 @@
 
 - 真实户型图、人工 GT、Review Burden 只放在被 Git 忽略的 `.floorplan-corpus/`，绝不提交（仓库公开）。
 - 当前真实样本均为网络公开户型图，可用于外部模型实验；公司或客户数据接入前必须另行获得授权。
-- 不在仓库中写入内网地址、个人机器路径、密钥。`TYPESAFE_API_KEY` 只在服务端使用，不得出现在 `VITE_*`、浏览器或日志中。
+- 不在仓库中写入内网地址、个人机器路径、密钥。`TYPESAFE_API_KEY`、`ANTHROPIC_API_KEY` 只在服务端 / 本地 CLI 使用，不得出现在 `VITE_*`、浏览器或日志中。
 
 ## 常用命令
 
@@ -28,6 +28,7 @@ pnpm typecheck
 pnpm test                     # vitest，测试文件为 src/**/*.test.ts 与 tools/**/*.test.mjs
 pnpm build
 pnpm floorplan:raster:check-demo   # 其余 *:check-demo 见 package.json
+pnpm floorplan:vision -- <intake.json>   # 视觉大模型 Extractor，需 ANTHROPIC_API_KEY；--dry-run / --replay 无需 Key
 ```
 
 ## 协作约定

@@ -8,6 +8,7 @@
     "./node": "./src/node/index.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
     "@homescape/spatial-model": "workspace:*",
     "sharp": "0.35.4"
   },

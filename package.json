@@ -35,10 +35,13 @@
     "floorplan:real:coverage": "node tools/floorplan-real-coverage.mjs",
     "floorplan:real:coverage:check-demo": "node tools/floorplan-real-coverage-smoke.mjs",
     "floorplan:gt:stage": "node tools/floorplan-gt-stage.mjs",
-    "floorplan:gt:stage:check-demo": "node tools/floorplan-gt-stage-smoke.mjs"
+    "floorplan:gt:stage:check-demo": "node tools/floorplan-gt-stage-smoke.mjs",
+    "floorplan:vision": "tsx --env-file-if-exists=.env tools/floorplan-vision-batch.ts",
+    "floorplan:vision:compare": "tsx tools/floorplan-vision-compare.ts"
   },
   "devDependencies": {
     "@homescape/floorplan-extractor": "workspace:*",
+    "@homescape/spatial-model": "workspace:*",
     "prettier": "^3.6.2",
     "tsx": "^4.20.5",
     "turbo": "^2.5.6",

@@ -22,6 +22,9 @@ export interface FloorPlanExtractionMetadata {
   outputTokens?: number
   costUsd?: number
   traceId?: string
+  /** 模型类 Extractor 的 Prompt 版本与请求指纹，用于判断两次运行是否可比。 */
+  promptVersion?: string
+  requestFingerprint?: string
 }
 
 export interface FloorPlanExtractionResult {

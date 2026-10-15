@@ -138,6 +138,15 @@ pnpm floorplan:raster:batch -- \
 
 该命令会批量生成 Candidate / Metadata，同时生成 `benchmark-raster.json` 与 `experiment-raster.json`。
 
+视觉大模型 Extractor（ADR-0017 主路径，需在本地 .env 配置服务端 `ANTHROPIC_API_KEY`）：
+
+~~~bash
+pnpm floorplan:vision -- .floorplan-corpus/pilot-a/intake.json --dry-run
+pnpm floorplan:vision -- .floorplan-corpus/pilot-a/intake.json --run-dir .floorplan-corpus/pilot-a/vision-runs/run-1
+~~~
+
+说明见 [Vision Extractor](docs/FLOORPLAN_VISION_EXTRACTOR.md)。
+
 真实 Corpus：
 
 ~~~bash
