@@ -86,6 +86,7 @@ Calibration：
 - 双轴时横向标定须 |dx| ≥ |dy|、纵向标定须 |dy| ≥ |dx|，否则 Draft 无效、导入报错：方向写反会静默互换 sx / sy，误差与要修的问题同量级，不能只当警告。
 - `basis` 表示比例尺来源：`assumed`（假设 px/m，如 Raster 默认值）、`annotated`（人工沿尺寸线标注）、`extracted`（自动从图上尺寸标注读出）、`structured`（米制结构化数据换算）。缺省视为旧数据未声明来源。
 - `basis: 'assumed'` 导入时生成 `issue-calibration-assumption`（双轴时为 `issue-calibration-x/y-assumption`）待确认问题，阻断 Finalize，与墙厚 / 层高未确认一致；缺省 basis 不阻断，以兼容已有人工 GT。
+- 标注工作台：可添加 / 移除纵向标尺（蓝色，横向为红色），两端可拖动、距离可输入；拖动端点或修改距离后该标定 `basis` 记为 `annotated`。新增纵向标尺的初始距离按横向比例推算，仍记为 `assumed`，直到人工确认。纵向标定的编辑计入 Review Burden 的 `calibrationEdits`，导出的 Ground Truth 含 `calibrationY`。
 - Benchmark 分别比较 X / Y 轴比例尺（任一侧缺 Y 时回退到 X），报告新增 `scaleErrorRatioX` / `scaleErrorRatioY`，原 `scaleErrorRatio` 取两轴最大值。
 
 Assumptions：

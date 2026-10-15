@@ -10,13 +10,21 @@ import {
 } from '@homescape/spatial-model'
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ChangeEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { clickNearStart, clampViewport, fullViewport, insertPolygonVertex, orthogonalEdge, orthogonalPoint, removePolygonVertex, zoomViewport, type AnnotationViewport } from './floorplan-annotation-geometry'
+import {
+  createTrailingThrottle,
+  deleteAnnotationDraft,
+  loadAnnotationDrafts,
+  saveAnnotationDraft,
+  type StoredAnnotationDraft,
+} from './floorplan-annotation-draft-store'
+import { clickNearStart, clampViewport, createVerticalCalibration, fullViewport, moveCalibrationEndpoint, removeVerticalCalibration, setCalibrationDistance, type CalibrationAxisKey, insertPolygonVertex, nearestEdgeProjection, nextEntityId, orthogonalEdge, orthogonalPoint, planOpeningFromClicks, projectPointToEdge, removePolygonVertex, screenToSource, viewportScreenScale, zoomViewport, type AnnotationViewport } from './floorplan-annotation-geometry'
 import { lockAnnotationBackgroundScroll } from './floorplan-annotation-scroll-lock'
 
 const roomTypeOptions: Array<{ value: RoomType; label: string }> = [
@@ -40,6 +48,7 @@ type DragTarget =
     }
   | {
       type: 'calibration'
+      axis: CalibrationAxisKey
       endpoint: 'start' | 'end'
     }
 
@@ -50,7 +59,27 @@ interface SourceImage {
   widthPx: number
   heightPx: number
   objectUrl: boolean
+  /** The uploaded file, kept so the draft autosave can persist it. */
+  blob?: Blob
 }
+
+/** On-screen sizes (CSS px) of interactive handles; converted to source px by the current zoom. */
+const HANDLE_PX = {
+  vertex: 5,
+  vertexSelected: 7,
+  vertexHit: 11,
+  vertexSelectedHit: 15,
+  calibration: 8,
+  calibrationHit: 16,
+  drawingPoint: 4,
+  drawingFirstPoint: 6,
+  snapDot: 5,
+  labelFont: 13,
+  labelStroke: 4,
+  openingSnapDistance: 24,
+} as const
+
+const AUTOSAVE_INTERVAL_MS = 1000
 
 const initialEditCounts: EditCounts = {
   roomVertexMoves: 0,
@@ -187,9 +216,19 @@ function polygonHasSelfIntersection(points: readonly PixelPoint[]) {
 
 function getDraftIssues(draft: FloorPlanDraft) {
   const issues: string[] = []
+  const rawDraft: FloorPlanDraft = draft
 
   if (!isFloorPlanDraft(draft)) {
     issues.push('Draft 未通过 FloorPlanDraft v0.1 Contract')
+    // 标尺方向不合法同样会导致 Contract 失败，单独给出可操作的原因。
+    if (rawDraft.calibrationY) {
+      for (const axisError of [
+        getFloorPlanCalibrationAxisError(rawDraft.calibration, 'x'),
+        getFloorPlanCalibrationAxisError(rawDraft.calibrationY, 'y'),
+      ]) {
+        if (axisError) issues.push(axisError)
+      }
+    }
     return issues
   }
 
@@ -499,6 +538,18 @@ export function FloorPlanAnnotationWorkbench({
   const panStart = useRef<{ x: number; y: number; view: AnnotationViewport } | null>(null)
   const editDragStart = useRef<{ point: PixelPoint; counted: boolean } | null>(null)
   const sourceLoadSequenceRef = useRef(0)
+  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null)
+  const [openingMode, setOpeningMode] = useState(false)
+  const [openingFirst, setOpeningFirst] = useState<{ roomId: string; point: PixelPoint } | null>(null)
+  const [restoreCandidates, setRestoreCandidates] = useState<StoredAnnotationDraft[]>([])
+  const [draftStatus, setDraftStatus] = useState<
+    { kind: 'idle' } | { kind: 'saved'; at: number } | { kind: 'unavailable' }
+  >({ kind: 'idle' })
+  const fieldBaselines = useRef(new Map<string, string>())
+  const savedKeyRef = useRef<string | null>(null)
+  const savedImageRef = useRef<{ label: string; blob: Blob } | null>(null)
+  const persistChainRef = useRef<Promise<void>>(Promise.resolve())
+  const latestRef = useRef({ workingDraft, editCounts, startedAt, touchedRoomIds, sourceImage })
 
   useEffect(() => {
     setWorkingDraft(cloneDraft(draft))
@@ -517,7 +568,55 @@ export function FloorPlanAnnotationWorkbench({
     sourceLoadSequenceRef.current += 1
     setSourceImage(null)
     setAnnotationError(null)
+    setOpeningMode(false)
+    setOpeningFirst(null)
+    fieldBaselines.current.clear()
+    savedKeyRef.current = null
+    savedImageRef.current = null
   }, [resetKey])
+
+  // Look for unfinished drafts left by a previous session (refresh, crash, closed tab).
+  useEffect(() => {
+    let cancelled = false
+    setRestoreCandidates([])
+    void (async () => {
+      try {
+        const stored = (await loadAnnotationDrafts()).filter((item) => !item.exported)
+        if (cancelled) return
+        const label = draft.source.sourceLabel
+        stored.sort((a, b) => Number(b.sourceLabel === label) - Number(a.sourceLabel === label) ||
+          b.savedAt - a.savedAt)
+        setRestoreCandidates(stored.slice(0, 3))
+      } catch {
+        if (!cancelled) setDraftStatus({ kind: 'unavailable' })
+      }
+    })()
+    return () => { cancelled = true }
+  }, [resetKey])
+
+  useLayoutEffect(() => {
+    latestRef.current = { workingDraft, editCounts, startedAt, touchedRoomIds, sourceImage }
+  })
+
+  // Measure the rendered canvas so handle sizes can be kept constant in screen pixels.
+  useLayoutEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const measure = () => {
+      const rect = svg.getBoundingClientRect()
+      setCanvasSize((previous) =>
+        previous && previous.width === rect.width && previous.height === rect.height
+          ? previous : { width: rect.width, height: rect.height })
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure)
+      return () => window.removeEventListener('resize', measure)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(svg)
+    return () => observer.disconnect()
+  }, [])
 
   // Only the foreground sidebar may scroll while the annotation workspace is open.
   // Cleanup restores the exact previous page styles on close, unmount and HMR.
@@ -533,6 +632,127 @@ export function FloorPlanAnnotationWorkbench({
       }
     }
   }, [sourceImage])
+
+  // Best-effort autosave to IndexedDB: failures only change the status hint.
+  const persistDraft = (exported: boolean) => {
+    const run = async () => {
+      const latest = latestRef.current
+      const totalEdits = Object.values(latest.editCounts).reduce((sum, value) => sum + (value ?? 0), 0)
+      const upload = latest.sourceImage?.blob
+      if (!exported && totalEdits === 0 && !upload) return
+      const label = latest.workingDraft.source.sourceLabel
+      const image = latest.sourceImage
+      const record: StoredAnnotationDraft = {
+        version: 1,
+        sourceLabel: label,
+        savedAt: Date.now(),
+        exported,
+        workingDraft: latest.workingDraft,
+        editCounts: latest.editCounts,
+        startedAt: latest.startedAt,
+        touchedRoomIds: [...latest.touchedRoomIds],
+        sourceImage: !image ? null : upload
+          ? { kind: 'upload', blob: upload, widthPx: image.widthPx, heightPx: image.heightPx }
+          : { kind: 'demo', widthPx: image.widthPx, heightPx: image.heightPx },
+      }
+      const previousImage = savedImageRef.current
+      const writeImage = upload
+        ? !(previousImage && previousImage.label === label && previousImage.blob === upload)
+        : previousImage !== null
+      try {
+        await saveAnnotationDraft(record, writeImage)
+        const previousKey = savedKeyRef.current
+        savedKeyRef.current = label
+        savedImageRef.current = upload ? { label, blob: upload } : null
+        if (previousKey && previousKey !== label) await deleteAnnotationDraft(previousKey)
+        setDraftStatus({ kind: 'saved', at: record.savedAt })
+      } catch {
+        setDraftStatus({ kind: 'unavailable' })
+      }
+    }
+    persistChainRef.current = persistChainRef.current.then(run, run)
+  }
+  const persistDraftRef = useRef(persistDraft)
+  persistDraftRef.current = persistDraft
+  const autosave = useMemo(
+    () => createTrailingThrottle(() => persistDraftRef.current(false), AUTOSAVE_INTERVAL_MS),
+    [],
+  )
+
+  useEffect(() => {
+    // Keep the old draft intact until the person chooses to restore or discard it.
+    if (restoreCandidates.length > 0 || startedAt === null) return
+    autosave.schedule()
+  }, [autosave, restoreCandidates.length, workingDraft, editCounts, startedAt, touchedRoomIds, sourceImage])
+
+  useEffect(() => {
+    const flush = () => autosave.flush()
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush() }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibility)
+      flush()
+    }
+  }, [autosave])
+
+  const restoreDraft = (stored: StoredAnnotationDraft) => {
+    sourceLoadSequenceRef.current += 1
+    const stamp = stored.sourceImage
+    setWorkingDraft(cloneDraft(stored.workingDraft))
+    setSelectedRoomId(stored.workingDraft.rooms[0]?.id ?? '')
+    setSourceImage(!stamp ? null : stamp.kind === 'upload'
+      ? {
+          url: URL.createObjectURL(stamp.blob),
+          widthPx: stamp.widthPx,
+          heightPx: stamp.heightPx,
+          objectUrl: true,
+          blob: stamp.blob,
+        }
+      : { url: '/floorplan-demo.svg', widthPx: stamp.widthPx, heightPx: stamp.heightPx, objectUrl: false })
+    setEditCounts({ ...initialEditCounts, ...stored.editCounts })
+    setStartedAt(stored.startedAt ?? Date.now())
+    setTouchedRoomIds(new Set(stored.touchedRoomIds))
+    setGeometryReviewed(false)
+    setViewport(null)
+    setSelectedVertexIndex(null)
+    setDrawingPoints(null)
+    setOpeningMode(false)
+    setOpeningFirst(null)
+    setCursorPoint(null)
+    setBlankCaseId('')
+    savedKeyRef.current = stored.sourceLabel
+    savedImageRef.current = stamp?.kind === 'upload'
+      ? { label: stored.sourceLabel, blob: stamp.blob } : null
+    setRestoreCandidates([])
+    setAnnotationError('已恢复上次未完成的标注；请重新核对后再勾选「已人工核对」')
+  }
+
+  const discardDraft = async (label: string) => {
+    setRestoreCandidates((current) => current.filter((item) => item.sourceLabel !== label))
+    try {
+      await deleteAnnotationDraft(label)
+    } catch {
+      setDraftStatus({ kind: 'unavailable' })
+    }
+  }
+
+  // Count a text/number field edit only if its value actually differs from when it gained focus.
+  const beginFieldEdit = (field: string, value: string | number) => {
+    fieldBaselines.current.set(field, String(value))
+  }
+  const commitFieldEdit = (
+    field: string,
+    value: string | number,
+    kind: keyof EditCounts,
+    roomId?: string,
+  ) => {
+    const baseline = fieldBaselines.current.get(field)
+    fieldBaselines.current.delete(field)
+    if (baseline !== undefined && baseline === String(value)) return
+    recordEdit(kind, roomId)
+  }
 
   const recordEdit = (
     kind: keyof EditCounts,
@@ -692,6 +912,7 @@ export function FloorPlanAnnotationWorkbench({
           widthPx: image.naturalWidth,
           heightPx: image.naturalHeight,
           objectUrl: true,
+          blob: file,
         }
       })
       setAnnotationError(null)
@@ -740,7 +961,11 @@ export function FloorPlanAnnotationWorkbench({
   const sourceHeight = workingDraft.source.heightPx
   const visibleView = viewport ?? fullViewport(sourceWidth, sourceHeight)
   const zoom = sourceWidth / visibleView.width
-  const closeSnapTolerance = Math.max(3, 12 / zoom)
+  // Screen pixels per source pixel; falls back to 1 until the canvas is measured.
+  const screenScale = (canvasSize
+    ? viewportScreenScale(canvasSize.width, canvasSize.height, visibleView) : null) ?? 1
+  const px = (screenPx: number) => screenToSource(screenPx, screenScale)
+  const closeSnapTolerance = Math.max(3, px(12))
   const isPanning = panMode || optionHeld
   const zoomBy = (factor: number) => setViewport((old) =>
     zoomViewport(old ?? fullViewport(sourceWidth, sourceHeight), factor, sourceWidth, sourceHeight))
@@ -781,12 +1006,34 @@ export function FloorPlanAnnotationWorkbench({
     }
   }, [canvasHovered, focusMode, disabled, sourceWidth, sourceHeight])
 
+  // Esc: first cancels a pending first click, then leaves the opening placement mode.
+  useEffect(() => {
+    if (!openingMode) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      const target = event.target
+      if (target instanceof HTMLElement && (target.isContentEditable ||
+          ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
+      event.preventDefault()
+      if (openingFirst) {
+        setOpeningFirst(null)
+        setAnnotationError('已取消起点；再按 Esc 退出画门窗')
+      } else {
+        setOpeningMode(false)
+        setCursorPoint(null)
+        setAnnotationError(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [openingMode, openingFirst])
+
   const startRoomDrag = (
     roomId: string,
     pointIndex: number,
     event: ReactPointerEvent<SVGCircleElement>,
   ) => {
-    if (disabled || drawingPoints !== null || isPanning) return
+    if (disabled || drawingPoints !== null || openingMode || isPanning) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     setSelectedRoomId(roomId)
@@ -801,15 +1048,18 @@ export function FloorPlanAnnotationWorkbench({
   }
 
   const startCalibrationDrag = (
+    axis: CalibrationAxisKey,
     endpoint: 'start' | 'end',
     event: ReactPointerEvent<SVGCircleElement>,
   ) => {
-    if (disabled || drawingPoints !== null || isPanning) return
+    if (disabled || drawingPoints !== null || openingMode || isPanning) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
-    setDragTarget({ type: 'calibration', endpoint })
+    const target = workingDraft[axis]
+    if (!target) return
+    setDragTarget({ type: 'calibration', axis, endpoint })
     editDragStart.current = {
-      point: workingDraft.calibration[endpoint === 'start' ? 'startPx' : 'endPx'],
+      point: target[endpoint === 'start' ? 'startPx' : 'endPx'],
       counted: false,
     }
   }
@@ -831,6 +1081,8 @@ export function FloorPlanAnnotationWorkbench({
       if (pointer) setCursorPoint(orthogonalMode && drawingPoints.length
         ? orthogonalPoint(drawingPoints[drawingPoints.length - 1]!, pointer,
           drawingPoints[0], closeSnapTolerance) : pointer)
+    } else if (openingMode && !disabled) {
+      setCursorPoint(pointFromPointer(event))
     }
     if (!dragTarget || disabled) return
 
@@ -855,14 +1107,9 @@ export function FloorPlanAnnotationWorkbench({
       return
     }
 
-    setWorkingDraft((current) => ({
-      ...current,
-      calibration: {
-        ...current.calibration,
-        [dragTarget.endpoint === 'start' ? 'startPx' : 'endPx']:
-          point,
-      },
-    }))
+    setWorkingDraft((current) =>
+      moveCalibrationEndpoint(current, dragTarget.axis, dragTarget.endpoint, point),
+    )
   }
 
   const stopDrag = () => {
@@ -871,17 +1118,98 @@ export function FloorPlanAnnotationWorkbench({
     panStart.current = null
   }
 
+  const enterOpeningMode = () => {
+    if (!selectedRoom || disabled || drawingPoints !== null) return
+    setOpeningMode(true)
+    setOpeningFirst(null)
+    setPanMode(false)
+    setCursorPoint(null)
+    setAnnotationError('画门窗：依次点击当前房间某条墙边上的起点和终点；Esc 取消')
+  }
+
+  const exitOpeningMode = () => {
+    setOpeningMode(false)
+    setOpeningFirst(null)
+    setCursorPoint(null)
+  }
+
+  const placeOpeningClick = (point: PixelPoint) => {
+    const room = selectedRoom
+    if (!room) {
+      setAnnotationError('请先选择要放置门窗的房间')
+      return
+    }
+    const maxDistancePx = px(HANDLE_PX.openingSnapDistance)
+    if (!openingFirst || openingFirst.roomId !== room.id) {
+      const hit = nearestEdgeProjection(room.boundaryPx, point, maxDistancePx)
+      if (!hit) {
+        setAnnotationError('请在当前房间的墙边附近点击门窗起点')
+        return
+      }
+      setOpeningFirst({ roomId: room.id, point })
+      setAnnotationError(`已记录起点（第 ${hit.edgeIndex + 1} 条边），请点击门窗终点；Esc 取消`)
+      return
+    }
+    const plan = planOpeningFromClicks(room, workingDraft.openings, openingFirst.point, point, { maxDistancePx })
+    if (!plan.ok) {
+      setAnnotationError(plan.reason)
+      return
+    }
+    const id = nextEntityId('manual-opening-', [
+      ...workingDraft.rooms.map((item) => item.id),
+      ...workingDraft.openings.map((item) => item.id),
+    ])
+    setWorkingDraft((current) => ({
+      ...current,
+      openings: [...current.openings, {
+        id,
+        roomId: room.id,
+        edgeIndex: plan.edgeIndex,
+        kind: 'door',
+        offsetPx: plan.offsetPx,
+        widthPx: plan.widthPx,
+        heightMeters: 2.1,
+      }],
+    }))
+    setGeometryReviewed(false)
+    recordEdit('openingGeometryEdits', room.id)
+    setOpeningFirst(null)
+    setAnnotationError(`已在第 ${plan.edgeIndex + 1} 条边放置 ${id}（默认门，高度 2.1m 仅为占位）；可继续放置，Esc 退出，类型与尺寸请在右侧核对`)
+  }
+
   const resetAnnotation = () => {
     if (!window.confirm('将丢弃当前全部校正，恢复到导入时的 Draft。确定继续？')) return
     setViewport(null)
     setSelectedVertexIndex(null)
     setDrawingPoints(null)
-    setCursorPoint(null)
+    exitOpeningMode()
     setGeometryReviewed(false)
     setWorkingDraft(cloneDraft(draft))
     setSelectedRoomId(draft.rooms[0]?.id ?? '')
     recordEdit('resets')
     setAnnotationError(null)
+  }
+
+  const addVerticalScale = () => {
+    if (disabled || workingDraft.calibrationY) return
+    setGeometryReviewed(false)
+    setWorkingDraft((current) => ({
+      ...current,
+      calibrationY: createVerticalCalibration(
+        current.calibration,
+        current.source.widthPx,
+        current.source.heightPx,
+      ),
+    }))
+    recordEdit('calibrationEdits')
+    setAnnotationError('已添加纵向标尺（距离按横向比例推算，仅为假设）；请拖到图上已知竖直尺寸并填写实际距离')
+  }
+
+  const removeVerticalScale = () => {
+    if (disabled || !workingDraft.calibrationY) return
+    setGeometryReviewed(false)
+    setWorkingDraft((current) => removeVerticalCalibration(current) as FloorPlanDraft)
+    recordEdit('calibrationEdits')
   }
 
   const startBlankAnnotation = () => {
@@ -901,6 +1229,7 @@ export function FloorPlanAnnotationWorkbench({
         startPx: [Math.min(10, widthPx / 4), Math.max(0, heightPx - 10)],
         endPx: [Math.min(widthPx, 110), Math.max(0, heightPx - 10)],
         realDistanceMeters: 0,
+        basis: 'assumed',
       },
       assumptions: {
         ...current.assumptions,
@@ -913,7 +1242,7 @@ export function FloorPlanAnnotationWorkbench({
     setSelectedRoomId('')
     setSelectedVertexIndex(null)
     setDrawingPoints(null)
-    setCursorPoint(null)
+    exitOpeningMode()
     setViewport(null)
     setGeometryReviewed(false)
     setTouchedRoomIds(new Set<string>())
@@ -1123,6 +1452,8 @@ export function FloorPlanAnnotationWorkbench({
 
     const base = safeFilename(workingDraft.source.sourceLabel)
     downloadJson(base + '.ground-truth.json', buildGroundTruth())
+    autosave.cancel()
+    persistDraft(true)
     setAnnotationError(null)
   }
 
@@ -1174,8 +1505,38 @@ export function FloorPlanAnnotationWorkbench({
           <button type="button" onClick={() => setFocusMode((old) => !old)}>
             {focusMode ? '退出专注模式' : '大画布专注模式'}
           </button>
+          {draftStatus.kind === 'saved' ? (
+            <span className="floorplan-draft-status" role="status">
+              草稿已自动保存 {new Date(draftStatus.at).toLocaleTimeString()}
+            </span>
+          ) : null}
+          {draftStatus.kind === 'unavailable' ? (
+            <span className="floorplan-draft-status is-warning" role="status">
+              浏览器存储不可用，未自动保存草稿，请及时导出
+            </span>
+          ) : null}
         </div>
       </div>
+
+      {restoreCandidates.length > 0 ? (
+        <div className="floorplan-restore-banner" role="status">
+          {restoreCandidates.map((item) => (
+            <div className="floorplan-restore-row" key={item.sourceLabel}>
+              <span>
+                发现未导出的标注草稿「{item.sourceLabel}」（{item.workingDraft.rooms.length} 个房间、
+                {item.workingDraft.openings.length} 个 Opening，保存于 {new Date(item.savedAt).toLocaleString()}
+                {item.sourceImage?.kind === 'upload' ? '，含原图' : ''}）。处理前不会自动保存新的修改。
+              </span>
+              <button type="button" disabled={disabled} onClick={() => restoreDraft(item)}>
+                恢复上次未完成的标注
+              </button>
+              <button type="button" disabled={disabled} onClick={() => void discardDraft(item.sourceLabel)}>
+                丢弃
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="floorplan-manual-toolbar">
         <label>
@@ -1194,7 +1555,7 @@ export function FloorPlanAnnotationWorkbench({
         </label>
         {drawingPoints === null ? (
           <button type="button" disabled={disabled || !sourceImage || !aspectRatioCompatible}
-            onClick={() => { setDrawingPoints([]); setCursorPoint(null); setPanMode(false); setGeometryReviewed(false); setAnnotationError(null) }}>
+            onClick={() => { exitOpeningMode(); setDrawingPoints([]); setPanMode(false); setGeometryReviewed(false); setAnnotationError(null) }}>
             绘制新房间
           </button>
         ) : (
@@ -1205,6 +1566,21 @@ export function FloorPlanAnnotationWorkbench({
               onClick={() => { setDrawingPoints((points) => points?.slice(0, -1) ?? null); setCursorPoint(null) }}>撤销顶点</button>
             <button type="button" disabled={disabled} onClick={() => { setDrawingPoints(null); setCursorPoint(null) }}>取消绘制</button>
           </>
+        )}
+        {openingMode ? (
+          <>
+            <span>
+              {openingFirst && openingFirst.roomId === selectedRoomId
+                ? '请点击门窗终点（Esc 取消起点）'
+                : '画门窗：在当前房间墙边点击起点（Esc 退出）'}
+            </span>
+            <button type="button" onClick={exitOpeningMode}>退出画门窗</button>
+          </>
+        ) : (
+          <button type="button" disabled={disabled || !selectedRoom || drawingPoints !== null}
+            onClick={enterOpeningMode}>
+            画门窗
+          </button>
         )}
       </div>
 
@@ -1258,7 +1634,7 @@ export function FloorPlanAnnotationWorkbench({
 
           <svg
             ref={svgRef}
-            className={isPanning ? 'floorplan-annotation-canvas is-panning' : 'floorplan-annotation-canvas'}
+            className={['floorplan-annotation-canvas', isPanning ? 'is-panning' : '', openingMode && !isPanning ? 'is-placing' : ''].filter(Boolean).join(' ')}
             viewBox={viewBox}
             style={{ aspectRatio: `${sourceWidth} / ${sourceHeight}` }}
             onPointerDown={(event) => {
@@ -1270,11 +1646,18 @@ export function FloorPlanAnnotationWorkbench({
                 event.preventDefault()
                 return
               }
+              if (openingMode) {
+                const placed = pointFromPointer(event)
+                if (!placed) return
+                event.preventDefault()
+                placeOpeningClick(placed)
+                return
+              }
               if (drawingPoints === null || !sourceImage || !aspectRatioCompatible) return
               const point = pointFromPointer(event)
               if (!point) return
               event.preventDefault()
-              if (drawingPoints.length >= 3 && clickNearStart(drawingPoints[0]!, point, zoom)) {
+              if (drawingPoints.length >= 3 && clickNearStart(drawingPoints[0]!, point, screenScale)) {
                 finishDrawingRoom()
                 return
               }
@@ -1326,35 +1709,56 @@ export function FloorPlanAnnotationWorkbench({
                     }
                     points={points}
                     onPointerDown={() => {
-                      if (!isPanning) { setSelectedRoomId(room.id); setSelectedVertexIndex(null) }
+                      if (!isPanning && !openingMode) { setSelectedRoomId(room.id); setSelectedVertexIndex(null) }
                     }}
                   />
                   <text
                     className="floorplan-annotation-label"
                     x={center[0]}
                     y={center[1]}
+                    style={{ fontSize: px(HANDLE_PX.labelFont), strokeWidth: px(HANDLE_PX.labelStroke) }}
                   >
                     {room.name}
                   </text>
-                  {room.boundaryPx.map((point, pointIndex) => (
-                    <circle
-                      key={room.id + '-' + pointIndex}
-                      className={
-                        selected && selectedVertexIndex === pointIndex
-                          ? 'floorplan-vertex active'
-                          : selected ? 'floorplan-vertex selected' : 'floorplan-vertex'
-                      }
-                      cx={point[0]}
-                      cy={point[1]}
-                      r={selected ? 8 : 5}
-                      onPointerDown={(event) =>
-                        startRoomDrag(room.id, pointIndex, event)
-                      }
-                    />
-                  ))}
                 </g>
               )
             })}
+
+            {/* Vertex handles: constant on-screen size with a larger transparent hit area.
+                The selected room is drawn last so its handles win on shared corners. */}
+            {[...workingDraft.rooms]
+              .sort((a, b) => Number(a.id === selectedRoomId) - Number(b.id === selectedRoomId))
+              .map((room) => {
+                const selected = room.id === selectedRoomId
+                return (
+                  <g key={room.id + '-vertices'}>
+                    {room.boundaryPx.map((point, pointIndex) => (
+                      <g key={pointIndex}>
+                        <circle
+                          className={
+                            selected && selectedVertexIndex === pointIndex
+                              ? 'floorplan-vertex active'
+                              : selected ? 'floorplan-vertex selected' : 'floorplan-vertex'
+                          }
+                          cx={point[0]}
+                          cy={point[1]}
+                          r={px(selected ? HANDLE_PX.vertexSelected : HANDLE_PX.vertex)}
+                          pointerEvents="none"
+                        />
+                        <circle
+                          className="floorplan-handle-hit"
+                          cx={point[0]}
+                          cy={point[1]}
+                          r={px(selected ? HANDLE_PX.vertexSelectedHit : HANDLE_PX.vertexHit)}
+                          onPointerDown={(event) =>
+                            startRoomDrag(room.id, pointIndex, event)
+                          }
+                        />
+                      </g>
+                    ))}
+                  </g>
+                )
+              })}
 
             {drawingPoints !== null && drawingPoints.length > 0 ? (
               <g pointerEvents="none">
@@ -1373,7 +1777,7 @@ export function FloorPlanAnnotationWorkbench({
                   <circle key={index}
                     className={index === 0 ? 'floorplan-drawing-point first' : 'floorplan-drawing-point'}
                     cx={point[0]} cy={point[1]}
-                    r={index === 0 ? Math.max(5, 8 / zoom) : Math.max(3, 5 / zoom)} />
+                    r={px(index === 0 ? HANDLE_PX.drawingFirstPoint : HANDLE_PX.drawingPoint)} />
                 ))}
               </g>
             ) : null}
@@ -1403,31 +1807,95 @@ export function FloorPlanAnnotationWorkbench({
               )
             })}
 
-            <line
-              className="floorplan-calibration-line"
-              x1={workingDraft.calibration.startPx[0]}
-              y1={workingDraft.calibration.startPx[1]}
-              x2={workingDraft.calibration.endPx[0]}
-              y2={workingDraft.calibration.endPx[1]}
-            />
-            <circle
-              className="floorplan-calibration-handle"
-              cx={workingDraft.calibration.startPx[0]}
-              cy={workingDraft.calibration.startPx[1]}
-              r="9"
-              onPointerDown={(event) =>
-                startCalibrationDrag('start', event)
-              }
-            />
-            <circle
-              className="floorplan-calibration-handle"
-              cx={workingDraft.calibration.endPx[0]}
-              cy={workingDraft.calibration.endPx[1]}
-              r="9"
-              onPointerDown={(event) =>
-                startCalibrationDrag('end', event)
-              }
-            />
+            {openingMode && selectedRoom && !disabled ? (() => {
+              const first = openingFirst && openingFirst.roomId === selectedRoom.id ? openingFirst : null
+              const snap = px(HANDLE_PX.openingSnapDistance)
+              const anchor = first ? nearestEdgeProjection(selectedRoom.boundaryPx, first.point, snap) : null
+              const hover = !first && cursorPoint
+                ? nearestEdgeProjection(selectedRoom.boundaryPx, cursorPoint, snap) : null
+              const target = anchor && cursorPoint
+                ? projectPointToEdge(selectedRoom.boundaryPx, anchor.edgeIndex, cursorPoint) : null
+              const hint = hover ?? anchor
+              const hintStart = hint ? selectedRoom.boundaryPx[hint.edgeIndex] : undefined
+              const hintEnd = hint
+                ? selectedRoom.boundaryPx[(hint.edgeIndex + 1) % selectedRoom.boundaryPx.length] : undefined
+              return (
+                <g pointerEvents="none">
+                  {hintStart && hintEnd ? (
+                    <line className="floorplan-opening-edge-hint"
+                      x1={hintStart[0]} y1={hintStart[1]} x2={hintEnd[0]} y2={hintEnd[1]} />
+                  ) : null}
+                  {anchor && target ? (
+                    <line className="floorplan-opening-preview"
+                      x1={anchor.point[0]} y1={anchor.point[1]} x2={target.point[0]} y2={target.point[1]} />
+                  ) : null}
+                  {hover ? (
+                    <circle className="floorplan-opening-snap" cx={hover.point[0]} cy={hover.point[1]}
+                      r={px(HANDLE_PX.snapDot)} />
+                  ) : null}
+                  {anchor ? (
+                    <circle className="floorplan-opening-snap" cx={anchor.point[0]} cy={anchor.point[1]}
+                      r={px(HANDLE_PX.snapDot)} />
+                  ) : null}
+                </g>
+              )
+            })() : null}
+
+            {([
+              ['calibration', workingDraft.calibration, '横向'],
+              ['calibrationY', workingDraft.calibrationY, '纵向'],
+            ] as const).map(([axis, cal, axisLabel]) =>
+              cal ? (
+                <g
+                  key={axis}
+                  className={axis === 'calibrationY' ? 'floorplan-calibration is-vertical' : 'floorplan-calibration'}
+                  data-calibration-axis={axis}
+                >
+                  <line
+                    className="floorplan-calibration-line"
+                    x1={cal.startPx[0]}
+                    y1={cal.startPx[1]}
+                    x2={cal.endPx[0]}
+                    y2={cal.endPx[1]}
+                  />
+                  <text
+                    className="floorplan-calibration-label"
+                    x={(cal.startPx[0] + cal.endPx[0]) / 2}
+                    y={(cal.startPx[1] + cal.endPx[1]) / 2}
+                    dy={axis === 'calibrationY' ? 0 : px(-10)}
+                    dx={axis === 'calibrationY' ? px(10) : 0}
+                    textAnchor={axis === 'calibrationY' ? 'start' : 'middle'}
+                    style={{ fontSize: px(HANDLE_PX.labelFont), strokeWidth: px(HANDLE_PX.labelStroke) }}
+                  >
+                    {axisLabel} {cal.realDistanceMeters}m
+                  </text>
+                  {(['start', 'end'] as const).map((endpoint) => {
+                    const point = endpoint === 'start' ? cal.startPx : cal.endPx
+                    return (
+                      <g key={endpoint}>
+                        <circle
+                          className="floorplan-calibration-handle"
+                          cx={point[0]}
+                          cy={point[1]}
+                          r={px(HANDLE_PX.calibration)}
+                          pointerEvents="none"
+                        />
+                        <circle
+                          className="floorplan-handle-hit"
+                          data-handle={`${axis}-${endpoint}`}
+                          cx={point[0]}
+                          cy={point[1]}
+                          r={px(HANDLE_PX.calibrationHit)}
+                          onPointerDown={(event) =>
+                            startCalibrationDrag(axis, endpoint, event)
+                          }
+                        />
+                      </g>
+                    )
+                  })}
+                </g>
+              ) : null,
+            )}
           </svg>
 
           {!aspectRatioCompatible ? (
@@ -1443,7 +1911,7 @@ export function FloorPlanAnnotationWorkbench({
             <select
               value={selectedRoomId}
               disabled={disabled}
-              onChange={(event) => { setSelectedRoomId(event.target.value); setSelectedVertexIndex(null) }}
+              onChange={(event) => { setSelectedRoomId(event.target.value); setSelectedVertexIndex(null); setOpeningFirst(null) }}
             >
               {workingDraft.rooms.map((room) => (
                 <option key={room.id} value={room.id}>
@@ -1486,8 +1954,11 @@ export function FloorPlanAnnotationWorkbench({
                       name: value,
                     }))
                   }}
+                  onFocus={() => beginFieldEdit('room-name:' + selectedRoom.id, selectedRoom.name)}
                   onBlur={() =>
-                    recordEdit(
+                    commitFieldEdit(
+                      'room-name:' + selectedRoom.id,
+                      selectedRoom.name,
                       'roomMetadataEdits',
                       selectedRoom.id,
                     )
@@ -1583,6 +2054,7 @@ export function FloorPlanAnnotationWorkbench({
                           step="1"
                           value={opening.offsetPx}
                           disabled={disabled}
+                          onFocus={() => beginFieldEdit('opening-offset:' + opening.id, opening.offsetPx)}
                           onChange={(event) => {
                             const value = Number(event.target.value)
                             updateOpening(opening.id, (current) => ({
@@ -1591,7 +2063,9 @@ export function FloorPlanAnnotationWorkbench({
                             }))
                           }}
                           onBlur={() =>
-                            recordEdit(
+                            commitFieldEdit(
+                              'opening-offset:' + opening.id,
+                              opening.offsetPx,
                               'openingGeometryEdits',
                               selectedRoom.id,
                             )
@@ -1606,6 +2080,7 @@ export function FloorPlanAnnotationWorkbench({
                           step="1"
                           value={opening.widthPx}
                           disabled={disabled}
+                          onFocus={() => beginFieldEdit('opening-width:' + opening.id, opening.widthPx)}
                           onChange={(event) => {
                             const value = Number(event.target.value)
                             updateOpening(opening.id, (current) => ({
@@ -1614,7 +2089,9 @@ export function FloorPlanAnnotationWorkbench({
                             }))
                           }}
                           onBlur={() =>
-                            recordEdit(
+                            commitFieldEdit(
+                              'opening-width:' + opening.id,
+                              opening.widthPx,
                               'openingGeometryEdits',
                               selectedRoom.id,
                             )
@@ -1641,17 +2118,51 @@ export function FloorPlanAnnotationWorkbench({
                 onChange={(event) => {
                   const value = Number(event.target.value)
                   setGeometryReviewed(false)
-                  setWorkingDraft((current) => ({
-                    ...current,
-                    calibration: {
-                      ...current.calibration,
-                      realDistanceMeters: value,
-                    },
-                  }))
+                  setWorkingDraft((current) =>
+                    setCalibrationDistance(current, 'calibration', value),
+                  )
                 }}
-                onBlur={() => recordEdit('calibrationEdits')}
+                onFocus={() => beginFieldEdit('calibration-distance', workingDraft.calibration.realDistanceMeters)}
+                onBlur={() => commitFieldEdit('calibration-distance', workingDraft.calibration.realDistanceMeters, 'calibrationEdits')}
               />
             </label>
+            <label>
+              Real Distance Y m（纵向）
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                data-testid="calibration-y-distance"
+                value={workingDraft.calibrationY?.realDistanceMeters ?? ''}
+                placeholder="未添加纵向标尺"
+                disabled={disabled || !workingDraft.calibrationY}
+                onChange={(event) => {
+                  const value = Number(event.target.value)
+                  setGeometryReviewed(false)
+                  setWorkingDraft((current) =>
+                    setCalibrationDistance(current, 'calibrationY', value),
+                  )
+                }}
+                onFocus={() => beginFieldEdit('calibration-y-distance', workingDraft.calibrationY?.realDistanceMeters ?? '')}
+                onBlur={() => commitFieldEdit('calibration-y-distance', workingDraft.calibrationY?.realDistanceMeters ?? '', 'calibrationEdits')}
+              />
+            </label>
+            <div className="floorplan-annotation-actions">
+              {workingDraft.calibrationY ? (
+                <button type="button" disabled={disabled} onClick={removeVerticalScale}>
+                  移除纵向标尺
+                </button>
+              ) : (
+                <button type="button" disabled={disabled} onClick={addVerticalScale}>
+                  添加纵向标尺
+                </button>
+              )}
+            </div>
+            <small>
+              基准：横向 {workingDraft.calibration.basis ?? '未声明'}
+              {workingDraft.calibrationY ? ' / 纵向 ' + (workingDraft.calibrationY.basis ?? '未声明') : ''}
+              。拖动端点或改距离后记为 annotated；assumed 会阻断 Finalize。
+            </small>
           </div>
 
           <div className="floorplan-annotation-group">
@@ -1664,6 +2175,7 @@ export function FloorPlanAnnotationWorkbench({
                 step="0.01"
                 value={workingDraft.assumptions.wallThicknessMeters}
                 disabled={disabled}
+                onFocus={() => beginFieldEdit('wall-thickness', workingDraft.assumptions.wallThicknessMeters)}
                 onChange={(event) => {
                   const value = Number(event.target.value)
                   setGeometryReviewed(false)
@@ -1675,7 +2187,7 @@ export function FloorPlanAnnotationWorkbench({
                     },
                   }))
                 }}
-                onBlur={() => recordEdit('assumptionEdits')}
+                onBlur={() => commitFieldEdit('wall-thickness', workingDraft.assumptions.wallThicknessMeters, 'assumptionEdits')}
               />
             </label>
             <label className="floorplan-check">
@@ -1708,6 +2220,7 @@ export function FloorPlanAnnotationWorkbench({
                 step="0.01"
                 value={workingDraft.assumptions.ceilingHeightMeters}
                 disabled={disabled}
+                onFocus={() => beginFieldEdit('ceiling-height', workingDraft.assumptions.ceilingHeightMeters)}
                 onChange={(event) => {
                   const value = Number(event.target.value)
                   setGeometryReviewed(false)
@@ -1719,7 +2232,7 @@ export function FloorPlanAnnotationWorkbench({
                     },
                   }))
                 }}
-                onBlur={() => recordEdit('assumptionEdits')}
+                onBlur={() => commitFieldEdit('ceiling-height', workingDraft.assumptions.ceilingHeightMeters, 'assumptionEdits')}
               />
             </label>
             <label className="floorplan-check">

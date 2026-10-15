@@ -1,4 +1,4 @@
-import type { FloorPlanDraftOpening, FloorPlanDraftRoom, PixelPoint } from '@homescape/spatial-model'
+import type { FloorPlanCalibration, FloorPlanDraftOpening, FloorPlanDraftRoom, PixelPoint } from '@homescape/spatial-model'
 
 export interface AnnotationViewport {
   x: number
@@ -99,4 +99,212 @@ export function insertPolygonVertex(
     openings: openings.map((o) => o.roomId === room.id && o.edgeIndex > index
       ? { ...o, edgeIndex: o.edgeIndex + 1 } : o),
   }
+}
+
+/**
+ * Screen pixels per source pixel for an SVG that fits `view` into a
+ * `clientWidth x clientHeight` box with preserveAspectRatio="meet".
+ * Returns null while the element has not been laid out yet.
+ */
+export function viewportScreenScale(
+  clientWidth: number,
+  clientHeight: number,
+  view: AnnotationViewport,
+): number | null {
+  if (!(clientWidth > 0) || !(clientHeight > 0) || !(view.width > 0) || !(view.height > 0)) return null
+  return Math.min(clientWidth / view.width, clientHeight / view.height)
+}
+
+/** Convert a size in screen pixels to source-image pixels so handles keep a constant on-screen size. */
+export function screenToSource(screenPx: number, scale: number): number {
+  return screenPx / (Number.isFinite(scale) && scale > 0 ? scale : 1)
+}
+
+export const DEFAULT_MIN_OPENING_WIDTH_PX = 4
+
+export interface EdgeProjection {
+  edgeIndex: number
+  /** Projection of the query point, clamped onto the edge segment. */
+  point: PixelPoint
+  /** Distance from the query point to the clamped projection. */
+  distancePx: number
+  /** Distance from the edge start to the clamped projection. */
+  alongPx: number
+  edgeLengthPx: number
+}
+
+/** Project a point onto one polygon edge. Returns null for an invalid or zero-length edge. */
+export function projectPointToEdge(
+  boundary: readonly PixelPoint[],
+  edgeIndex: number,
+  point: PixelPoint,
+): EdgeProjection | null {
+  const a = boundary[edgeIndex]
+  const b = boundary[(edgeIndex + 1) % boundary.length]
+  if (!Number.isInteger(edgeIndex) || edgeIndex < 0 || !a || !b) return null
+  const length = Math.hypot(b[0] - a[0], b[1] - a[1])
+  if (length <= 1e-6) return null
+  const ux = (b[0] - a[0]) / length
+  const uy = (b[1] - a[1]) / length
+  const along = Math.min(length, Math.max(0, (point[0] - a[0]) * ux + (point[1] - a[1]) * uy))
+  const projected: PixelPoint = [a[0] + ux * along, a[1] + uy * along]
+  return {
+    edgeIndex,
+    point: projected,
+    distancePx: Math.hypot(point[0] - projected[0], point[1] - projected[1]),
+    alongPx: along,
+    edgeLengthPx: length,
+  }
+}
+
+/** Nearest edge of the polygon within maxDistancePx (ties resolve to the lowest index). */
+export function nearestEdgeProjection(
+  boundary: readonly PixelPoint[],
+  point: PixelPoint,
+  maxDistancePx = Infinity,
+): EdgeProjection | null {
+  let best: EdgeProjection | null = null
+  for (let index = 0; index < boundary.length; index += 1) {
+    const candidate = projectPointToEdge(boundary, index, point)
+    if (candidate && candidate.distancePx <= maxDistancePx &&
+        (!best || candidate.distancePx < best.distancePx - 1e-9)) best = candidate
+  }
+  return best
+}
+
+export type OpeningPlacement =
+  | {
+      ok: true
+      edgeIndex: number
+      offsetPx: number
+      widthPx: number
+      start: PixelPoint
+      end: PixelPoint
+    }
+  | { ok: false; reason: string }
+
+const round2 = (value: number) => Math.round(value * 100) / 100
+
+/**
+ * Bind two canvas clicks to an Opening: the first click picks the nearest wall
+ * edge, the second is projected onto that same edge. Both are clamped to the
+ * edge, so the result always fits inside it.
+ */
+export function planOpeningFromClicks(
+  room: Pick<FloorPlanDraftRoom, 'id' | 'boundaryPx'>,
+  openings: readonly FloorPlanDraftOpening[],
+  first: PixelPoint,
+  second: PixelPoint,
+  options: { maxDistancePx?: number; minWidthPx?: number } = {},
+): OpeningPlacement {
+  const maxDistancePx = options.maxDistancePx ?? Infinity
+  const minWidthPx = options.minWidthPx ?? DEFAULT_MIN_OPENING_WIDTH_PX
+  const a = nearestEdgeProjection(room.boundaryPx, first, maxDistancePx)
+  if (!a) return { ok: false, reason: '第一点离当前房间的墙边太远，请靠近墙边点击' }
+  if (a.edgeLengthPx < minWidthPx) {
+    return { ok: false, reason: `第 ${a.edgeIndex + 1} 条墙边太短，无法容纳门窗` }
+  }
+  const b = projectPointToEdge(room.boundaryPx, a.edgeIndex, second)
+  if (!b || b.distancePx > maxDistancePx) {
+    return { ok: false, reason: '第二点需要落在与第一点相同的墙边附近' }
+  }
+  const offsetPx = round2(Math.min(a.alongPx, b.alongPx))
+  const widthPx = round2(Math.abs(a.alongPx - b.alongPx))
+  if (widthPx < minWidthPx) {
+    return { ok: false, reason: '两点距离太近，门窗宽度不足，请拉开两点' }
+  }
+  const clash = openings.find((o) => o.roomId === room.id && o.edgeIndex === a.edgeIndex &&
+    offsetPx < o.offsetPx + o.widthPx - 1e-6 && o.offsetPx < offsetPx + widthPx - 1e-6)
+  if (clash) return { ok: false, reason: `该位置与已有门窗 ${clash.id} 重叠，请错开或先调整它` }
+  const edgeStart = room.boundaryPx[a.edgeIndex]!
+  const edgeEnd = room.boundaryPx[(a.edgeIndex + 1) % room.boundaryPx.length]!
+  const ux = (edgeEnd[0] - edgeStart[0]) / a.edgeLengthPx
+  const uy = (edgeEnd[1] - edgeStart[1]) / a.edgeLengthPx
+  return {
+    ok: true,
+    edgeIndex: a.edgeIndex,
+    offsetPx,
+    widthPx,
+    start: [edgeStart[0] + ux * offsetPx, edgeStart[1] + uy * offsetPx],
+    end: [edgeStart[0] + ux * (offsetPx + widthPx), edgeStart[1] + uy * (offsetPx + widthPx)],
+  }
+}
+
+/** Smallest unused `${prefix}${n}` id (n starts at 1). */
+export function nextEntityId(prefix: string, usedIds: Iterable<string>): string {
+  const used = new Set(usedIds)
+  let sequence = 1
+  while (used.has(prefix + sequence)) sequence += 1
+  return prefix + sequence
+}
+
+/** 人工拖动端点或修改距离后，标定来源变为人工标注。 */
+export function markCalibrationAnnotated<T extends FloorPlanCalibration>(calibration: T): T {
+  return { ...calibration, basis: 'annotated' }
+}
+
+/**
+ * 新增纵向标尺的初始值：放在图像左侧、竖直居中，长度取图高一半。
+ * 距离按横向标尺的 px/m 推算（横向距离 ≤ 0 时记为 0 让标注者填写），
+ * 属于假设值，basis 固定为 `assumed`，直到人工拖动或修改距离。
+ */
+export function createVerticalCalibration(
+  horizontal: Pick<FloorPlanCalibration, 'startPx' | 'endPx' | 'realDistanceMeters'>,
+  widthPx: number,
+  heightPx: number,
+): FloorPlanCalibration {
+  const x = Math.min(Math.max(widthPx * 0.05, 0), widthPx)
+  const lengthPx = heightPx / 2
+  const horizontalPx = Math.hypot(
+    horizontal.endPx[0] - horizontal.startPx[0],
+    horizontal.endPx[1] - horizontal.startPx[1],
+  )
+  const metersPerPx = horizontalPx > 0 && horizontal.realDistanceMeters > 0
+    ? horizontal.realDistanceMeters / horizontalPx
+    : 0
+  return {
+    startPx: [x, heightPx * 0.25],
+    endPx: [x, heightPx * 0.75],
+    realDistanceMeters: Math.round(lengthPx * metersPerPx * 100) / 100,
+    basis: 'assumed',
+  }
+}
+
+export type CalibrationAxisKey = 'calibration' | 'calibrationY'
+
+/** 返回把指定轴标定端点移动到新位置后的 Draft 片段（basis 同步置为 annotated）。 */
+export function moveCalibrationEndpoint<T extends { calibration: FloorPlanCalibration; calibrationY?: FloorPlanCalibration }>(
+  draft: T,
+  axis: CalibrationAxisKey,
+  endpoint: 'start' | 'end',
+  point: PixelPoint,
+): T {
+  const target = draft[axis]
+  if (!target) return draft
+  return {
+    ...draft,
+    [axis]: markCalibrationAnnotated({
+      ...target,
+      [endpoint === 'start' ? 'startPx' : 'endPx']: point,
+    }),
+  }
+}
+
+/** 修改指定轴标定的真实距离（米）；同步置为 annotated。 */
+export function setCalibrationDistance<T extends { calibration: FloorPlanCalibration; calibrationY?: FloorPlanCalibration }>(
+  draft: T,
+  axis: CalibrationAxisKey,
+  realDistanceMeters: number,
+): T {
+  const target = draft[axis]
+  if (!target) return draft
+  return { ...draft, [axis]: markCalibrationAnnotated({ ...target, realDistanceMeters }) }
+}
+
+/** 移除纵向标尺，恢复为单一等比标定。 */
+export function removeVerticalCalibration<T extends { calibrationY?: FloorPlanCalibration }>(
+  draft: T,
+): Omit<T, 'calibrationY'> {
+  const { calibrationY: _removed, ...rest } = draft
+  return rest
 }
