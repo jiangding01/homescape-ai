@@ -37,3 +37,17 @@ pnpm floorplan:vision -- <intake.json>   # 视觉大模型 Extractor，需 ANTHR
 - 每个 PR 完成后先 Code Review，合并由仓库负责人决定。
 - 不在 UI 文案、错误信息中引用 PR 编号。
 - 新代码优先补单元测试（vitest），几何与 Revision 逻辑尤其需要。
+
+## 并行会话分工
+
+本仓库同时由两条工作线推进，按模块划分，互不越界：
+
+| 工作线 | 负责范围 | 主要目录 |
+|---|---|---|
+| 工程主线（单独的云端会话） | 几何内核 → 状态服务端化 → 对话式设计 Agent → 布局规划器 | `packages/spatial-model`、`domain`、`planner`、`catalog`、`renderer-*`、`ai-runtime`、`design-intelligence`、`apps/*` |
+| 数据与评测（项目线程） | 真实户型标注、视觉大模型 Extractor 批量运行与调优、评测报告 | `packages/floorplan-extractor`、`tools/floorplan-*`、私有 `.floorplan-corpus/` |
+
+- 两条线的交接契约是 FloorPlanDraft。任何一方修改该协议，须在 PR 描述中写明，另一方合并前先同步 `main`。
+- 开工前先 `git fetch origin main` 并查看最近合并的 PR，避免重复实现。
+- 验收或评测请基于 `main` 的最新提交，并在报告中注明所用 commit。
+- 确需改动对方目录时，改动保持最小，并在 PR 描述中说明原因。
