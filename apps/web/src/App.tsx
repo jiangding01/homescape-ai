@@ -75,7 +75,18 @@ type APIErrorResponse = {
   }
 }
 
+type PendingDestructiveProposal = {
+  request: string
+  operations: DesignOperation[]
+  meta: AIExecutionMeta
+  targets: { action: '删除' | '替换'; name: string }[]
+  epoch: number
+  spatialModelId: string
+  headRevisionId: string | null
+}
+
 const WORKBENCH_PROJECT_ID = 'project-live-workbench'
+const INTERPRET_TIMEOUT_MS = 20_000
 
 function createWorkspaceTimeline(spatialModel: HomeSpatialModel) {
   return createRevisionTimeline(
@@ -124,6 +135,8 @@ export function App() {
   const [aiFeedback, setAiFeedback] =
     useState<AIInterpretationResponse | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
+  const [pendingProposal, setPendingProposal] =
+    useState<PendingDestructiveProposal | null>(null)
   const [plannerFeedback, setPlannerFeedback] =
     useState<PlannerResult | null>(null)
   const revisionSequence = useRef(1)
@@ -218,6 +231,7 @@ export function App() {
     setPlannerFeedback(null)
     setAiFeedback(null)
     setAiError(null)
+    setPendingProposal(null)
     setCommand('为' + nextRoom.name + '布置现代原木风的沙发、茶几和绿植')
     setView('3d')
   }
@@ -427,6 +441,13 @@ export function App() {
     interpretingRef.current = true
     setInterpreting(true)
     setAiError(null)
+    setPendingProposal(null)
+
+    const abortController = new AbortController()
+    const timeoutId = setTimeout(
+      () => abortController.abort(),
+      INTERPRET_TIMEOUT_MS,
+    )
 
     try {
       const requestId = 'design-command-' + aiRequestSequence.current
@@ -455,6 +476,7 @@ export function App() {
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: abortController.signal,
         body: JSON.stringify({
           requestId,
           command: normalizedCommand,
@@ -469,7 +491,17 @@ export function App() {
         }),
       })
 
-      const payload: unknown = await response.json()
+      const responseText = await response.text()
+      let payload: unknown
+      try {
+        payload = JSON.parse(responseText)
+      } catch {
+        throw new Error(
+          '服务返回了无法识别的内容（HTTP ' +
+            response.status +
+            '），请稍后重试。',
+        )
+      }
 
       if (!response.ok) {
         const apiError = payload as APIErrorResponse
@@ -485,20 +517,81 @@ export function App() {
         interpretation.status === 'ready' &&
         interpretation.operations.length > 0
       ) {
-        await executePlan(
-          normalizedCommand,
-          interpretation.operations,
-          interpretation.meta,
-        )
+        const targets = interpretation.operations.flatMap((operation) => {
+          if (
+            operation.type !== 'remove_object' &&
+            operation.type !== 'replace_object'
+          ) {
+            return []
+          }
+
+          const target = objects.find((item) => item.id === operation.objectId)
+          const catalogName = target?.metadata?.catalogName
+          const name =
+            typeof catalogName === 'string'
+              ? catalogName
+              : (target?.category ?? '未知对象（' + operation.objectId + '）')
+
+          return [
+            {
+              action: operation.type === 'remove_object' ? '删除' : '替换',
+              name,
+            } as const,
+          ]
+        })
+
+        if (targets.length > 0) {
+          setPendingProposal({
+            request: normalizedCommand,
+            operations: interpretation.operations,
+            meta: interpretation.meta,
+            targets,
+            epoch: workspaceEpochRef.current,
+            spatialModelId: timeline.state.spatialModelId,
+            headRevisionId: timeline.state.headRevisionId ?? null,
+          })
+        } else {
+          await executePlan(
+            normalizedCommand,
+            interpretation.operations,
+            interpretation.meta,
+          )
+        }
       }
     } catch (error) {
-      setAiError(
-        error instanceof Error ? error.message : '自然语言设计指令解析失败',
-      )
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setAiError('请求超时（超过 20 秒），请检查网络后重试。')
+      } else if (error instanceof TypeError) {
+        setAiError('无法连接到设计服务，请检查网络后重试。')
+      } else {
+        setAiError(
+          error instanceof Error ? error.message : '自然语言设计指令解析失败',
+        )
+      }
     } finally {
+      clearTimeout(timeoutId)
       interpretingRef.current = false
       setInterpreting(false)
     }
+  }
+
+  const confirmPendingProposal = async () => {
+    const proposal = pendingProposal
+    if (!proposal || planningRef.current || interpretingRef.current) return
+
+    setPendingProposal(null)
+
+    if (
+      workspaceEpochRef.current !== proposal.epoch ||
+      timeline.state.spatialModelId !== proposal.spatialModelId ||
+      (timeline.state.headRevisionId ?? null) !== proposal.headRevisionId
+    ) {
+      setAiError('工作区已发生变化，这次删除/替换提案已作废，请重新输入指令。')
+      return
+    }
+
+    setAiError(null)
+    await executePlan(proposal.request, proposal.operations, proposal.meta)
   }
 
   return (
@@ -587,6 +680,35 @@ export function App() {
             <div className="ai-feedback ai-feedback-error">
               <strong>AI Runtime</strong>
               <span>{aiError}</span>
+            </div>
+          ) : null}
+
+          {pendingProposal ? (
+            <div className="ai-feedback ai-proposal" role="alertdialog">
+              <strong>需要确认的操作</strong>
+              <ul>
+                {pendingProposal.targets.map((target, index) => (
+                  <li key={index}>
+                    将{target.action}：{target.name}
+                  </li>
+                ))}
+              </ul>
+              <div className="ai-proposal-actions">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void confirmPendingProposal()}
+                >
+                  确认执行
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setPendingProposal(null)}
+                >
+                  取消
+                </button>
+              </div>
             </div>
           ) : null}
 
