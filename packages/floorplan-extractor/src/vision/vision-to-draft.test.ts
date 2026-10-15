@@ -141,14 +141,40 @@ describe('visionResponseToDraft', () => {
     ).toBe(true)
   })
 
-  it('只有单轴尺寸线时按等比处理并提示人工确认另一轴', () => {
+  it('只有单轴尺寸线时另一轴标记为 assumed，导入后阻断 Finalize', async () => {
     const response = syntheticVisionResponse()
     response.dimensionLines = response.dimensionLines.filter((line) => line.axis === 'vertical')
     const { draft, warnings, stats } = visionResponseToDraft(response, options)
 
-    expect(draft.calibrationY).toBeUndefined()
+    expect(isFloorPlanDraft(draft)).toBe(true)
     expect(stats.pixelsPerMeterY).toBeCloseTo(110, 6)
+    expect(draft.calibrationY?.basis).toBe('extracted')
+    expect(draft.calibration.basis).toBe('assumed')
     expect(warnings.some((w) => w.includes('只读到纵向尺寸线'))).toBe(true)
+
+    const result = await new FloorPlanDraftImporter().parse(draft, context)
+    const ids = result.unresolved.map((issue) => issue.id)
+    expect(ids).toContain('issue-calibration-x-assumption')
+    expect(ids).not.toContain('issue-calibration-y-assumption')
+    const living = result.model.floors[0]!.rooms.find((room) => room.type === 'living')!
+    // 横向按纵向 110 px/m 假设：5 m 宽读成 500/110 m
+    expect(polygonArea(living.boundary)).toBeCloseTo((500 / 110) * 4, 6)
+  })
+
+  it('开口 offset + width 不超过所在边长', () => {
+    const response = syntheticVisionResponse()
+    response.openings = [
+      {
+        kind: 'window',
+        start: { x: 100.03, y: 48 },
+        end: { x: 310, y: 48 },
+        swing: 'none',
+        confidence: 0.5,
+      },
+    ]
+    const { draft } = visionResponseToDraft(response, options)
+    const opening = draft.openings[0]!
+    expect(opening.offsetPx + opening.widthPx).toBeLessThanOrEqual(500)
   })
 
   it('同一份响应总是得到逐字节相同的 Draft', () => {

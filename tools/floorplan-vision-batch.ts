@@ -14,6 +14,7 @@ import {
   visionPromptFingerprint,
   type StoredVisionResponse,
   type VisionEffort,
+  type VisionImagePreparer,
   type VisionModelClient,
   type VisionResponseStore,
 } from '@homescape/floorplan-extractor'
@@ -307,7 +308,21 @@ async function main() {
         : args.assumedPixelsPerMeter
   }
 
-  const preparer = new SharpVisionImagePreparer({ maxLongEdgePx: args.maxLongEdge })
+  // 预检查与正式提取共用同一次预处理结果，避免每张图编码两遍。
+  const sharpPreparer = new SharpVisionImagePreparer({ maxLongEdgePx: args.maxLongEdge })
+  const prepared = new Map<string, ReturnType<typeof sharpPreparer.prepare>>()
+  const preparer: VisionImagePreparer = {
+    id: sharpPreparer.id,
+    prepare(bytes, mediaType) {
+      const key = sha256(bytes) + ':' + mediaType
+      let result = prepared.get(key)
+      if (!result) {
+        result = sharpPreparer.prepare(bytes, mediaType)
+        prepared.set(key, result)
+      }
+      return result
+    },
+  }
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
   if (!args.dryRun && !args.replay && !apiKey) {
     fail('缺少服务端环境变量 ANTHROPIC_API_KEY（只在本地 / 服务端设置，勿写入 VITE_* 或仓库）')
@@ -328,7 +343,18 @@ async function main() {
     })
 
   // ---- Preflight：全部 Case 先完成图像预处理与尺寸核对，再发出任何模型请求 ----
-  const selected = intake.cases.filter((c) => !args.cases || args.cases.has(c.id))
+  const recordedCases = new Map<string, Record<string, unknown>>()
+  if (recordedReport && Array.isArray(recordedReport.cases)) {
+    for (const entry of recordedReport.cases) {
+      if (record(entry) && typeof entry.id === 'string') recordedCases.set(entry.id, entry)
+    }
+  }
+  // 回放默认只覆盖原运行实际跑过的 Case（not_run 的 Case 没有响应可回放）。
+  const selected = intake.cases.filter((c) =>
+    args.cases
+      ? args.cases.has(c.id)
+      : !args.replay || (recordedCases.get(c.id)?.candidateStatus ?? 'not_run') !== 'not_run',
+  )
   const planned = new Map<
     string,
     { fingerprint: string; modelWidthPx: number; modelHeightPx: number }
@@ -376,13 +402,6 @@ async function main() {
       ) + '\n',
     )
     return
-  }
-
-  const recordedCases = new Map<string, Record<string, unknown>>()
-  if (recordedReport && Array.isArray(recordedReport.cases)) {
-    for (const entry of recordedReport.cases) {
-      if (record(entry) && typeof entry.id === 'string') recordedCases.set(entry.id, entry)
-    }
   }
 
   const results = new Map<string, Record<string, unknown>>()
@@ -441,7 +460,10 @@ async function main() {
         failureMessage: failureMessage(error),
       })
       if (error instanceof VisionExtractionError && error.response) {
+        // 失败响应同样消耗 Token，计入用量，避免低估成本。
         entry.servedModel = error.response.servedModel
+        entry.inputTokens = error.response.inputTokens ?? null
+        entry.outputTokens = error.response.outputTokens ?? null
       }
     }
     entry.elapsedMs = Date.now() - started
@@ -450,7 +472,8 @@ async function main() {
       const recorded = recordedCases.get(source.id)
       entry.matchesRecordedCandidate =
         recorded?.candidateStatus === entry.candidateStatus &&
-        recorded?.candidateSha256 === entry.candidateSha256
+        recorded?.candidateSha256 === entry.candidateSha256 &&
+        recorded?.failureCode === entry.failureCode
     }
     results.set(source.id, entry)
     process.stderr.write(
@@ -478,7 +501,7 @@ async function main() {
     .map((c) => c.extractorLatencyMs)
     .filter((v): v is number => typeof v === 'number')
   const sum = (key: string) =>
-    generated.reduce((total, c) => {
+    cases.reduce((total, c) => {
       const v = c[key]
       return total + (typeof v === 'number' ? v : 0)
     }, 0)

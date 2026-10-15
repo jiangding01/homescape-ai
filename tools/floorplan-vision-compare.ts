@@ -120,7 +120,15 @@ async function main() {
   const summary = {
     caseCount: cases.length,
     bothGenerated: comparisons.length,
-    statusAgreement: cases.filter((c) => c.statusA === c.statusB).length / cases.length,
+    // 失败需原因也相同才算一致；两侧都未运行不计为一致。
+    statusAgreement:
+      cases.filter(
+        (c) =>
+          c.statusA === c.statusB &&
+          c.statusA !== 'not_run' &&
+          (c.failureCodeA ?? null) === (c.failureCodeB ?? null),
+      ).length / cases.length,
+    notRunInEither: cases.filter((c) => c.statusA === 'not_run' || c.statusB === 'not_run').length,
     identicalCandidates: cases.filter((c) => c.identicalCandidate).length,
     roomCountEqualRate: comparisons.length
       ? comparisons.filter((c) => c.roomCountA === c.roomCountB).length / comparisons.length
@@ -129,6 +137,9 @@ async function main() {
       ? comparisons.reduce((sum, c) => sum + c.matchedRooms, 0) /
         comparisons.reduce((sum, c) => sum + Math.max(c.roomCountA, c.roomCountB), 0)
       : null,
+    // 下列均值只在“两侧都有值”的 Case 上计算；缺值 Case 数单独列出，不静默移出。
+    casesWithoutMatchedRooms: comparisons.filter((c) => c.meanMatchedRoomIou === null).length,
+    casesWithoutLivingInBoth: comparisons.filter((c) => c.livingRoomIou === null).length,
     meanMatchedRoomIou: mean(
       comparisons.flatMap((c) => (c.meanMatchedRoomIou === null ? [] : [c.meanMatchedRoomIou])),
     ),

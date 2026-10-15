@@ -130,22 +130,17 @@ function calibrateAxis(
     }
     return true
   })
-  const pixelsPerMeter = median(inliers.map((item) => item.ratio))
+  const inlierCenter = median(inliers.map((item) => item.ratio))
   const representative = [...inliers].sort(
     (a, b) =>
-      Math.abs(a.ratio - pixelsPerMeter) - Math.abs(b.ratio - pixelsPerMeter) ||
+      Math.abs(a.ratio - inlierCenter) - Math.abs(b.ratio - inlierCenter) ||
       b.line.valueMillimeters - a.line.valueMillimeters,
   )[0]!
 
-  // 代表线只保留该轴分量，使其严格沿轴，同时 px/m 与中位数一致。
+  // 代表线取最接近中位数的那条，端点保持图上界线位置，只把另一轴坐标对齐到起点使其严格沿轴；
+  // Draft 的比例尺因此就是这条图上尺寸线本身的读数。
   const [sx, sy] = representative.start
-  const lengthPx = (representative.line.valueMillimeters / 1000) * pixelsPerMeter
-  const direction =
-    axis === 'x'
-      ? Math.sign(representative.end[0] - sx) || 1
-      : Math.sign(representative.end[1] - sy) || 1
-  const endPx: PixelPoint =
-    axis === 'x' ? [round(sx + direction * lengthPx), sy] : [sx, round(sy + direction * lengthPx)]
+  const endPx: PixelPoint = axis === 'x' ? [representative.end[0], sy] : [sx, representative.end[1]]
 
   return {
     calibration: {
@@ -154,7 +149,7 @@ function calibrateAxis(
       realDistanceMeters: representative.line.valueMillimeters / 1000,
       basis: 'extracted',
     },
-    pixelsPerMeter,
+    pixelsPerMeter: representative.ratio,
     used: inliers.length,
   }
 }
@@ -201,9 +196,10 @@ function matchOpeningToEdge(
       const distancePx = (ps.across + pe.across) / 2
       if (distancePx > maxDistancePx) return
 
-      const from = Math.max(0, Math.min(ps.along, pe.along))
-      const to = Math.min(edgeLength, Math.max(ps.along, pe.along))
-      const widthPx = to - from
+      // 先对端点取整再求宽度，保证 offset + width 不因分别取整而超出边长。
+      const from = round(Math.max(0, Math.min(ps.along, pe.along)))
+      const to = Math.min(round(Math.min(edgeLength, Math.max(ps.along, pe.along))), edgeLength)
+      const widthPx = round(to - from)
       // 至少一半开口宽度落在这条边上，避免绑到相邻的短边。
       if (widthPx < Math.max(1, segmentLength * 0.5)) return
 
@@ -211,8 +207,8 @@ function matchOpeningToEdge(
         best = {
           roomIndex,
           edgeIndex,
-          offsetPx: round(from),
-          widthPx: round(widthPx),
+          offsetPx: from,
+          widthPx,
           distancePx,
         }
       }
@@ -314,10 +310,22 @@ export function visionResponseToDraft(
       )
     }
   } else if (calibrationX || calibrationY) {
+    // 只有单轴读数时，另一轴按同一 px/m 假设，并显式标记 assumed，导入后阻断 Finalize。
     const only = (calibrationX ?? calibrationY)!
-    calibration = only.calibration
+    const [ox, oy] = only.calibration.startPx
+    const assumedLengthPx = round(only.pixelsPerMeter)
+    const assumedAxis: FloorPlanCalibration = {
+      startPx: [ox, oy],
+      endPx: calibrationX ? [ox, oy + assumedLengthPx] : [ox + assumedLengthPx, oy],
+      realDistanceMeters: assumedLengthPx / only.pixelsPerMeter,
+      basis: 'assumed',
+    }
+    calibration = calibrationX ? only.calibration : assumedAxis
+    calibrationYOut = calibrationX ? assumedAxis : only.calibration
     warnings.push(
-      '只读到' + (calibrationX ? '横向' : '纵向') + '尺寸线，按等比缩放处理，另一轴需人工确认',
+      '只读到' +
+        (calibrationX ? '横向' : '纵向') +
+        '尺寸线，另一轴暂按同一比例假设，需人工标定后才能 Finalize',
     )
   } else {
     basis = 'assumed'

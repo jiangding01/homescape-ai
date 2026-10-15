@@ -27,8 +27,8 @@ PNG / JPEG (.floorplan-corpus/, Intake Manifest)
 转换（`vision-to-draft.ts`，纯函数）：
 
 - 坐标从模型图像换回原图像素；去掉闭合重复点；面积过小的多边形丢弃并告警
-- 比例尺按横纵两轴分别取尺寸线 px/m 的中位数，偏离中位数超过 15% 的读数视为误读，不参与；`basis: extracted`
-- 只有单轴尺寸线时按等比处理并告警；完全没有尺寸线时用 `--assumed-pixels-per-meter`，`basis: assumed`，导入后阻断 Finalize
+- 比例尺按横纵两轴分别处理：偏离中位数超过 15% 的读数视为误读，不参与；取最接近中位数的那条图上尺寸线作为标定线（端点保持图上位置），`basis: extracted`
+- 只有单轴尺寸线时，另一轴暂按同一 px/m 处理并标记 `basis: assumed`，导入后阻断 Finalize；完全没有尺寸线时用 `--assumed-pixels-per-meter`，`basis: assumed`，导入后阻断 Finalize
 - 门窗绑定到最近的平行房间边（距离上限 0.4 m，至少一半宽度落在边上），贴不上的丢弃并告警
 - 墙厚 0.24 m、层高 2.8 m、门高 2.1 m、窗高 1.5 m / 窗台 0.9 m 均为未确认占位值
 
@@ -38,7 +38,7 @@ PNG / JPEG (.floorplan-corpus/, Intake Manifest)
 
 1. **配置固定**：模型 ID、effort、长边上限、Prompt 版本与哈希、Schema、预处理器（含 libvips 版本）都写入报告 `config`，每个 Case 记录请求指纹。
 2. **转换可回放**：原始响应保存在 `<run-dir>/responses/`。`--replay` 不调用模型、不需要 Key，重新生成 Candidate 并核对与原运行逐字节一致（`replayMismatchCount` 必须为 0）。配置或 Prompt 改了，指纹不匹配，回放直接失败。
-3. **运行间可比**：同一批图片跑两次，用 `floorplan:vision:compare` 量化差异（房间匹配率、匹配 IoU、客厅 IoU、横纵比例尺相对差、门窗匹配率）。这衡量稳定性，不是准确率。
+3. **运行间可比**：同一批图片跑两次，用 `floorplan:vision:compare` 量化差异（房间匹配率、匹配 IoU、客厅 IoU、横纵比例尺相对差、门窗匹配率）。失败原因不同不算一致，缺值 Case 单独计数。这衡量稳定性，不是准确率。
 
 改 Prompt 措辞时必须升级 `VISION_PROMPT_VERSION`。
 
