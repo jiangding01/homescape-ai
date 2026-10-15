@@ -41,6 +41,7 @@ function usage() {
     '  [--model <id>]               默认 claude-opus-5-5',
     '  [--effort <low|medium|high|xhigh|max>]  默认 high',
     '  [--max-long-edge <px>]       送入模型的图像长边上限，默认 1568',
+    '  [--min-long-edge <px>]       小图先放大到的长边下限，默认 1200；0 表示不放大',
     '  [--assumed-pixels-per-meter <n>]  图上无尺寸线时的假设比例尺，默认 100',
     '  [--concurrency <n>]          默认 2',
     '  [--cases <id,id,...>]        只跑部分 Case（报告中其余 Case 记为 not_run）',
@@ -58,6 +59,7 @@ interface Args {
   model: string
   effort: VisionEffort
   maxLongEdge: number
+  minLongEdge: number
   assumedPixelsPerMeter: number
   concurrency: number
   cases?: Set<string>
@@ -74,6 +76,8 @@ function parseArgs(argv: string[]): Args {
     model: 'claude-opus-5-5',
     effort: 'high',
     maxLongEdge: 1568,
+    // 网络户型图多为 700~800 px，门弧和窗线太细；放大到 1200 px 再送模型。
+    minLongEdge: 1200,
     assumedPixelsPerMeter: 100,
     concurrency: 2,
     dryRun: false,
@@ -100,6 +104,7 @@ function parseArgs(argv: string[]): Args {
       if (!EFFORTS.includes(effort)) fail('--effort 非法')
       args.effort = effort
     } else if (flag === '--max-long-edge') args.maxLongEdge = Math.round(number(flag, 256, 8000))
+    else if (flag === '--min-long-edge') args.minLongEdge = Math.round(number(flag, 0, 8000))
     else if (flag === '--assumed-pixels-per-meter')
       args.assumedPixelsPerMeter = number(flag, 1, 10000)
     else if (flag === '--concurrency') args.concurrency = Math.round(number(flag, 1, 8))
@@ -302,6 +307,8 @@ async function main() {
       : args.effort
     args.maxLongEdge =
       typeof config.maxLongEdgePx === 'number' ? config.maxLongEdgePx : args.maxLongEdge
+    // 旧报告没有该字段，当时不放大。
+    args.minLongEdge = typeof config.minLongEdgePx === 'number' ? config.minLongEdgePx : 0
     args.assumedPixelsPerMeter =
       typeof config.assumedPixelsPerMeter === 'number'
         ? config.assumedPixelsPerMeter
@@ -309,7 +316,11 @@ async function main() {
   }
 
   // 预检查与正式提取共用同一次预处理结果，避免每张图编码两遍。
-  const sharpPreparer = new SharpVisionImagePreparer({ maxLongEdgePx: args.maxLongEdge })
+  if (args.minLongEdge > args.maxLongEdge) fail('--min-long-edge 不能大于 --max-long-edge')
+  const sharpPreparer = new SharpVisionImagePreparer({
+    maxLongEdgePx: args.maxLongEdge,
+    minLongEdgePx: args.minLongEdge,
+  })
   const prepared = new Map<string, ReturnType<typeof sharpPreparer.prepare>>()
   const preparer: VisionImagePreparer = {
     id: sharpPreparer.id,
@@ -520,6 +531,7 @@ async function main() {
       model: args.model,
       effort: args.effort,
       maxLongEdgePx: args.maxLongEdge,
+      minLongEdgePx: args.minLongEdge,
       assumedPixelsPerMeter: args.assumedPixelsPerMeter,
       promptVersion: VISION_PROMPT_VERSION,
       promptFingerprint,

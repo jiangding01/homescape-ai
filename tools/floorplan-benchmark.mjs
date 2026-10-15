@@ -7,6 +7,7 @@ import {
   findCalibrationsCopiedFromCandidate,
   getGroundTruthCalibrationBasisErrors,
 } from './floorplan-gt-calibration.mjs'
+import { sharedWallRoomIds } from './floorplan-opening-match.mjs'
 
 const DEFAULT_GRID_SIZE = 96
 const EPSILON = 1e-9
@@ -811,9 +812,19 @@ function matchOpenings(
     const expectedCenter = openingCenter(expected, expectedOpening)
     if (!expectedCenter) continue
 
+    const sharedWallCandidateRoomIds = new Set(
+      sharedWallRoomIds(expected, expectedOpening)
+        .map((roomId) => expectedToCandidateRoom.get(roomId))
+        .filter(Boolean),
+    )
+
     for (const candidateOpening of candidate.openings) {
+      const viaSharedWall =
+        candidateOpening.roomId !== candidateRoomId &&
+        sharedWallCandidateRoomIds.has(candidateOpening.roomId)
+
       if (
-        candidateOpening.roomId !== candidateRoomId ||
+        (candidateOpening.roomId !== candidateRoomId && !viaSharedWall) ||
         candidateOpening.kind !== expectedOpening.kind
       ) {
         continue
@@ -832,6 +843,7 @@ function matchOpenings(
       candidates.push({
         expectedOpening,
         candidateOpening,
+        viaSharedWall,
         centerErrorRatio,
         widthErrorRatio:
           Math.abs(
@@ -931,6 +943,7 @@ function evaluateCase(
         maxCandidateRoomOverlapRatio: 1,
         openingPrecision: 0,
         openingRecall: 0,
+        openingSharedWallMatches: 0,
         meanOpeningCenterErrorRatio: null,
         meanOpeningWidthErrorRatio: null,
         scaleErrorRatio: 1,
@@ -1019,6 +1032,10 @@ function evaluateCase(
     maxCandidateRoomOverlapRatio,
     openingPrecision,
     openingRecall,
+    // 其中按“墙另一侧房间”匹配上的数量，便于核对共享墙规则对指标的影响
+    openingSharedWallMatches: openingMatches.filter(
+      (match) => match.viaSharedWall,
+    ).length,
     meanOpeningCenterErrorRatio:
       openingMatches.length > 0
         ? mean(

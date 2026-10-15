@@ -67,16 +67,17 @@ describe('visionResponseToDraft', () => {
     expect(warnings.some((w) => w.includes('非等比缩放'))).toBe(true)
   })
 
-  it('开口绑定到最近的平行房间边，贴不上的开口丢弃并告警', () => {
+  it('开口绑定到平行房间边，隔墙门挂在卧室一侧，贴不上的开口丢弃并告警', () => {
     const { draft, warnings } = visionResponseToDraft(syntheticVisionResponse(), options)
 
     expect(draft.openings).toEqual([
       {
+        // 客厅与卧室之间的门：两侧都能贴合，按约定挂在卧室（左边自下而上）
         id: 'vision-opening-1',
-        roomId: 'vision-room-1',
-        edgeIndex: 1,
+        roomId: 'vision-room-2',
+        edgeIndex: 3,
         kind: 'door',
-        offsetPx: 200,
+        offsetPx: 150,
         widthPx: 90,
         heightMeters: 2.1,
         swing: 'left',
@@ -96,6 +97,26 @@ describe('visionResponseToDraft', () => {
       },
     ])
     expect(warnings.some((w) => w.includes('第 3 个开口'))).toBe(true)
+  })
+
+  it('隔墙开口的挂载房间与房间顺序无关，阳台门挂在室内一侧', () => {
+    const response = syntheticVisionResponse()
+    response.rooms[0]!.type = 'balcony'
+    response.rooms.reverse()
+    const { draft } = visionResponseToDraft(response, options)
+    const door = draft.openings.find((opening) => opening.kind === 'door')!
+    const host = draft.rooms.find((room) => room.id === door.roomId)!
+
+    expect(host.type).toBe('bedroom')
+  })
+
+  it('只贴合一侧的外墙窗仍挂在最近的边上', () => {
+    const response = syntheticVisionResponse()
+    response.rooms[1]!.type = 'bathroom'
+    const { draft } = visionResponseToDraft(response, options)
+    const window = draft.openings.find((opening) => opening.kind === 'window')!
+
+    expect(window.roomId).toBe('vision-room-1')
   })
 
   it('墙厚与层高保持未确认的假设值', () => {
