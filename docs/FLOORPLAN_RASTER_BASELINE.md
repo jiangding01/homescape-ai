@@ -213,6 +213,94 @@ Fixture 中故意加入短家具 / 文本样式线段，用于验证默认 minWa
 
 这些问题不应该继续靠 Synthetic Fixture 猜参数。
 
+## Real Corpus Batch
+
+PR #17 增加批处理入口：
+
+~~~bash
+pnpm floorplan:raster:batch -- \
+  .floorplan-corpus/corpus.json \
+  --min-cases 10 \
+  --pixels-per-meter 100
+~~~
+
+该命令会先执行 Corpus Gate，生成 / 刷新：
+
+~~~text
+.floorplan-corpus/reports/corpus-summary.json
+~~~
+
+只有 Corpus 与 Ground Truth 完整后，才会继续为全部 PNG / JPEG Case 生成：
+
+~~~text
+candidates/raster-orthogonal-v0.1/<case-id>.json
+metadata/raster-orthogonal-v0.1/<case-id>.json
+reports/raster-batch.json
+benchmark-raster.json
+experiment-raster.json
+~~~
+
+其中：
+
+- `benchmark-raster.json` 已引用 Ground Truth 与本轮 Raster Candidate；
+- `experiment-raster.json` 已引用 datasetFingerprint、Candidate、Metadata 与预期 Review Burden 路径；
+- Benchmark Report 默认目标为 `reports/benchmark-raster.json`；
+- Review Burden 文件仍必须由 PR #13 Workbench 的真实人工 Review 产生，不自动伪造。
+
+其中 sourceId 固定使用匿名 caseId，不使用原始文件名。Batch Report 记录 datasetFingerprint，便于后续 Benchmark / Pilot 核对数据版本。
+
+需要先只检查 Corpus 与输出计划时可使用：
+
+~~~bash
+pnpm floorplan:raster:batch -- \
+  .floorplan-corpus/corpus.json \
+  --min-cases 10 \
+  --dry-run
+~~~
+
+Batch 当前故意只接受 floorplan_image + PNG / JPEG；PDF 仍属于后续 Rasterization Scope。
+
+完成 Batch 后：
+
+~~~bash
+pnpm floorplan:benchmark -- \
+  .floorplan-corpus/benchmark-raster.json \
+  --report .floorplan-corpus/reports/benchmark-raster.json
+~~~
+
+人工 Review 并把 Sidecar 放入：
+
+~~~text
+.floorplan-corpus/review/raster-orthogonal-v0.1/<case-id>.json
+~~~
+
+然后：
+
+~~~bash
+pnpm floorplan:pilot -- \
+  .floorplan-corpus/experiment-raster.json \
+  --min-cases 10 \
+  --require-corpus-coverage \
+  --require-complete-review \
+  --require-complete-metadata \
+  --report .floorplan-corpus/reports/pilot-raster.json
+~~~
+
+## Raster Batch 安全与失败边界
+
+PR #17 的 Batch 在执行 Corpus Gate 和 Raster Extractor 前进行全量 Preflight：
+
+- 检查所有 Case Source 位于 Corpus 根目录内，并匹配 PNG / JPEG 扩展名；
+- 对全部 Candidate、Metadata、报告、Manifest 输出路径进行根目录边界检查；
+- 检查输出位置已有的符号链接，禁止输出目录越界与文件符号链接写入；
+- 拒绝不同输出角色共用同一文件路径，以及大小写差异引起的跨平台路径冲突；
+- 拒绝自定义报告位置覆盖 Corpus Manifest、原图或 Ground Truth 输入文件；
+- 如果后续 Case 在 Preflight 阶段就无效，本轮不会先生成前面 Case 的 Candidate。
+
+CI 中的 `floorplan:raster:batch:check-demo` 覆盖路径逃逸、输出文件符号链接、输出路径冲突及后续 Case 扩展名错误。
+
+**边界说明：** Preflight 是写入前的快速验证，不构成整个批次的原子事务。Raster Extraction 在运行期间报错时，可能留下已经生成的部分 Candidate / Metadata；不得把未完成批次当作最终 Benchmark 输入。真实 Pilot 仍需确认完整 Batch Report 与所有 Case 产物。
+
 ## 下一步
 
 PR #17 使用真实 10 Case 跑：

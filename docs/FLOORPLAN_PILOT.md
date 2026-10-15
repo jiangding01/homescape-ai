@@ -1,5 +1,17 @@
 # Floor Plan Pilot Evaluation
 
+## 真实图片 Intake（Ground Truth 之前）
+
+在 Real 10 Case Pilot 的正式 Corpus Gate 之前，允许使用 `tools/floorplan-real-intake.mjs` 对用户提供的真实 PNG / JPEG 进行 **source-only preflight**。这是独立的预标注入口，不修改现有的 Corpus / Benchmark / Pilot 协议，也不伪造 Ground Truth。
+
+- 逐 Case 验证匿名 ID、文件扩展名、真实格式文件头、图像尺寸、SHA-256、重复源图及 realpath 安全边界；
+- 输出 `sourceSetFingerprint` 与每图来源组别、原图 SHA（如有），不声称是正式 `datasetFingerprint`；
+- `--extract` 可调用现有 `floorplan-raster-extract.ts` 生成未确认 Candidate 与 Metadata，失败单独记录且保持非 0 退出；
+- `benchmarkReady=false`、`groundTruthCaseCount=0`，直到人工确认 GT、正式 Corpus Gate 及 Review 完成；
+- 真实图片和 Intake 报告只保存在 Git 忽略的 `.floorplan-corpus/` 中，不上传公开仓库。
+
+详细命令与边界见 [FLOORPLAN_REAL_INTAKE.md](FLOORPLAN_REAL_INTAKE.md)。
+
 ## 目标
 
 PR #14 把 PR #11 的结构指标、PR #12 的 Corpus Fingerprint、PR #13 的 Human Review Burden 和 Extractor Metadata 合并成一次可回归的 Experiment Report。
@@ -48,6 +60,23 @@ Experiment：
 ~~~
 
 所有引用文件必须位于 Experiment Manifest 所在目录之内，realpath 后也不能越界。
+
+对于 PR #17 Raster Pilot，不需要手工拼装这份 Manifest。运行：
+
+~~~bash
+pnpm floorplan:raster:batch -- \
+  .floorplan-corpus/corpus.json \
+  --min-cases 10
+~~~
+
+会自动生成：
+
+~~~text
+.floorplan-corpus/benchmark-raster.json
+.floorplan-corpus/experiment-raster.json
+~~~
+
+Experiment 中的 Review Burden 路径只作为待填位置；真实 Sidecar 仍由 Workbench 人工 Review 导出。
 
 ## 运行
 
@@ -132,6 +161,14 @@ Pilot Tool 会校验：
 - symbols
 - textDensity
 
+每个 Slice 除结构指标与 Review Burden 外，还会保留 Benchmark Failure Summary：
+
+~~~text
+failedCaseCount
+totalFailureCount
+failureCounts
+~~~
+
 例如可以直接看到：
 
 ~~~text
@@ -140,9 +177,22 @@ geometry=irregular
   openingRecall
   reviewDuration
   editCount
+  failureCounts:
+    room_recall_below_threshold: 4
+    room_iou_below_threshold: 3
 ~~~
 
-而不是只看一个全局平均数。
+或者：
+
+~~~text
+annotation=no_dimension
+  failureCounts:
+    scale_error_above_threshold: 5
+~~~
+
+这样 PR #17 的真实 Pilot 可以直接按失败分布判断下一步研发方向，而不是只看一个全局平均数。
+
+Failure Code 仍来自 Benchmark，不在 Pilot 阶段重新推断。Pilot 只负责保持并聚合证据，避免 Join 后丢失原始失败原因。
 
 ## Fingerprint
 
@@ -205,3 +255,25 @@ PR #14 解决的是“如何严谨地跑真实 Pilot 并比较结果”。
 Review Burden Sidecar 本地文件仍保留 sourceLabel，便于标注阶段定位 Case；Pilot Report 在 Join 后会主动移除 sourceLabel，只保留匿名 caseId 和指标。
 
 Extraction Sidecar 中的 sourceId / traceId 也不会复制进 Pilot Report，只保留评测需要的 extractorId、provider、model、latency、token / cost 字段。
+
+## PR #17 · 已确认 Ground Truth 与提取覆盖率（不伪造 Candidate）
+
+首次真实 `case-001` 已有人为确认的 FloorPlanDraft v0.1（7 Room、12 Opening）；原始 Raster Pilot 在该 Case 上报告 `no_orthogonal_outline`，并没有 Candidate。正式 `floorplan:benchmark` 不能将未生成 Candidate 的 Case 转换为零 IoU，也不能静默从样本分母中剔除。
+
+先用原有 `floorplan:corpus` 得到私有真实 `corpus-summary.json`，再将至少一个 Intake Report 与 GT Corpus 进行 Source SHA-256 关联：
+
+```bash
+node tools/floorplan-real-coverage.mjs \
+  .floorplan-corpus/pr17-case001-corpus-preflight/reports/corpus-summary.json \
+  .floorplan-corpus/pilot-a/reports/intake-report.json \
+  --extractor-id raster-orthogonal-v0.1 \
+  --report .floorplan-corpus/pr17-case001-corpus-preflight/reports/coverage.json
+```
+
+输出字段 `groundTruthCaseCount`、`failed`、`generated_unverified`、`not_run`、`failureCounts`。它严格拒绝 source SHA 不匹配、重复 Case、Corpus Case 无 Intake 证据，以及被错误标记为已生成但没有 Candidate 哈希的样本。报告不含原始地址、sourcePath 或 GT 内容，也不计算伪造的 IoU。
+
+该报告只是**Extractor Coverage/Failure Evidence**，`benchmarkStatus=not_evaluated`。已有 Candidate 的 Case 仍须经过正式结构 Benchmark 与 Human Review 才能判定质量。工具不会改变原有 Benchmark Threshold 或 Corpus Gate。
+
+## 四个代表 Case 的分阶段 Ground Truth
+
+用 [FLOORPLAN_REAL_GT_STAGING.md](FLOORPLAN_REAL_GT_STAGING.md) 的 stage.json 显式批准 GT；私有文件只留在 .floorplan-corpus。Stage 生成只含已确认 Case 的 Corpus Manifest，并通过原有 Corpus Gate 和 Coverage 工具复核，避免将未生成的 Candidate 转换为零 IoU。case-001 已正式验证；case-004、case-b005、case-b008 仍需人工审核。

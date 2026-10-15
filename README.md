@@ -98,7 +98,7 @@ PR #16 仍是 classical deterministic baseline，不代表真实 Corpus 上已�
 ## 户型 Extractor / Corpus
 
 ~~~bash
-pnpm floorplan:benchmark
+pnpm floorplan:benchmark:check-demo
 pnpm floorplan:extract-demo
 pnpm floorplan:corpus:check-demo
 pnpm floorplan:pilot:check-demo
@@ -127,6 +127,16 @@ pnpm floorplan:raster -- input.png candidate.json \
   --metadata candidate.meta.json \
   --source-id case-001
 ~~~
+
+真实 10 Case Raster Pilot 准备：
+
+~~~bash
+pnpm floorplan:raster:batch -- \
+  .floorplan-corpus/corpus.json \
+  --min-cases 10
+~~~
+
+该命令会批量生成 Candidate / Metadata，同时生成 `benchmark-raster.json` 与 `experiment-raster.json`。
 
 真实 Corpus：
 

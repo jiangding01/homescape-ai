@@ -304,6 +304,34 @@
 
 PR #16 已把 PNG / JPEG 像素接入 Geometry Observation，并通过 Synthetic E2E 验证 Decoder → Detector → Reconstructor 链路。
 
+当前进度：
+
+- [x] Pilot 保留 Benchmark Failure Codes
+- [x] Extractor 级 Failure Summary
+- [x] Corpus Tag Slice Failure Summary
+- [x] Failure Slice Synthetic Regression Smoke
+- [x] Real Corpus Raster Batch Runner
+- [x] Batch Runner 先执行 Corpus Gate 并记录 datasetFingerprint
+- [x] 自动生成 Benchmark Manifest / Pilot Experiment Manifest
+- [x] Benchmark CLI 支持真实 Manifest，并保留独立 Synthetic Smoke
+- [x] Raster Batch 输出路径安全检查与重复目标 Gate
+- [x] Raster Batch 全量 Case 输入预检查
+- [x] Raster Batch 错误路径 / 后续 Case 无效的回归 Smoke
+- [x] A/B 两组各 10 张真实候选图完成离线预选（素材不入 Git；非 Ground Truth）
+- [x] 真实素材 Intake Preflight / Source Set Fingerprint / Candidate 预提取 CLI
+- [x] 文件头、尺寸、SHA-256、路径越界与未标注状态 Smoke
+- [x] Intake 提取产物哈希、Case 一致性与 Room / Opening / Warning 计数
+- [x] Intake 失败类型聚合与假 Extractor 成功/失败回归 Smoke
+- [x] 20 张真实图片默认墙线扫描的独立诊断（非正式 Benchmark）
+- [ ] 准备第一批 10 张去敏真实户型图
+- [x] 补齐 PR #13 Workbench 的空白图建档、多边形绘制、Room / Opening 增删及显式人工确认（PR #17）
+- [ ] 用 PR #13 Workbench 完成 4 个代表 Case 的人工 Ground Truth（case-001 / case-004 / case-b005 / case-b008）
+- [ ] 跑 PR #12 Corpus Check 生成真实 datasetFingerprint
+- [ ] 用 PR #16 Raster Detector 生成 Candidate
+- [ ] 人工 Review + Burden
+- [ ] PR #11 Benchmark + PR #14 Pilot Report
+- [ ] 根据 Failure Slice 形成下一阶段技术决策记录
+
 下一阶段不应该继续扩 Synthetic Heuristic，而应拿真实数据验证：
 
 1. 准备第一批 10 张去敏真实户型图
@@ -337,3 +365,8 @@ PR #16 已把 PNG / JPEG 像素接入 Geometry Observation，并通过 Synthetic
 ## P4 — Delivery
 
 施工规则、物料、阶段衔接、验收与交付。
+
+
+PR #17 补充进度（2026-10-12）：`case-001` 已获取新版人工 GT 与 Review Burden，原图/GT 保留在私有 Corpus；已备好单 Case 官方 Corpus Gate 输入（正式运行结果仍待核验）。增加了 `floorplan:real:coverage` 将已确认 GT 与 Intake 提取状态按 Source SHA 严格关联，失败 Case 不伪造 Candidate / IoU。后续推进其余代表样本并验证跨风格 Failure Slice；PR #17 仍为 Draft。
+
+PR #17 追加（2026-10-12）：case-001 的正式 Corpus Summary 与 Extraction Coverage 已由用户本地验证成功。增加 4 Case 分阶段 GT 审核及 SHA 固定机制；其余 3 Case 仍待人工确认，不得进入 Benchmark。

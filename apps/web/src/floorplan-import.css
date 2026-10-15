@@ -581,3 +581,137 @@
     margin-left: 0;
   }
 }
+
+/* PR #17: blank-source polygon authoring and explicit human GT review. */
+.floorplan-manual-toolbar,
+.floorplan-manual-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.floorplan-manual-toolbar label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+}
+.floorplan-manual-toolbar input {
+  min-width: 120px;
+  padding: 7px;
+  border: 1px solid #c1bbaf;
+  background: #fffdf8;
+}
+.floorplan-manual-toolbar button,
+.floorplan-manual-actions button,
+.floorplan-opening-row button {
+  padding: 7px 10px;
+  border: 1px solid #bdb6aa;
+  background: #f6f2ea;
+  cursor: pointer;
+}
+.floorplan-manual-toolbar button:disabled,
+.floorplan-manual-actions button:disabled,
+.floorplan-opening-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.floorplan-drawing-line {
+  stroke: #c16a23;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 6 4;
+}
+.floorplan-drawing-point {
+  fill: #fff;
+  stroke: #c16a23;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+/* PR #17 · precision annotation */
+.floorplan-annotation.is-focused {
+  position: fixed;
+  inset: 12px;
+  z-index: 1000;
+  overflow: auto;
+  padding: 16px;
+  background: #f6f3ed;
+  border: 1px solid #bbb4a9;
+  box-shadow: 0 12px 50px rgba(25, 25, 20, 0.25);
+}
+.floorplan-annotation.is-focused .floorplan-annotation-canvas { max-height: none; height: min(76vh, 1050px); }
+.floorplan-annotation-canvas { max-height: 780px; }
+.floorplan-annotation-canvas.is-panning { cursor: grab; }
+.floorplan-annotation-canvas.is-panning:active { cursor: grabbing; }
+.floorplan-orthogonal-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.floorplan-zoom-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.floorplan-zoom-controls button { padding: 3px 7px; border: 1px solid #bdb6aa; background: #fffdf8; cursor: pointer; font-size: 11px; }
+.floorplan-zoom-controls button[aria-pressed='true'] { background: #34382f; color: #fffdf8; }
+.floorplan-drawing-point.first { fill: #ffb25c; stroke: #8d421a; }
+.floorplan-preview-line { opacity: 0.65; stroke-dasharray: 4 6; }
+
+/* PR #17: viewport-filling annotation workspace */
+.floorplan-annotation.is-focused {
+  display: grid;
+  box-sizing: border-box;
+  width: calc(100vw - 24px);
+  height: calc(100dvh - 24px);
+  max-width: none;
+  min-width: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+.floorplan-annotation.is-focused .floorplan-annotation-layout {
+  grid-template-columns: minmax(0, 1fr) 300px;
+  min-height: 0;
+  height: 100%;
+}
+.floorplan-annotation.is-focused.sidebar-collapsed .floorplan-annotation-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+.floorplan-annotation.is-focused.sidebar-collapsed .floorplan-annotation-panel { display: none; }
+.floorplan-annotation.is-focused .floorplan-annotation-canvas-shell {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.floorplan-annotation.is-focused .floorplan-annotation-canvas {
+  flex: 1 1 auto;
+  height: 100%;
+  width: 100%;
+  max-height: none;
+  min-height: 0;
+  aspect-ratio: auto !important;
+}
+.floorplan-annotation.is-focused .floorplan-annotation-panel {
+  max-height: none;
+  min-height: 0;
+  overflow-y: auto;
+}
+.floorplan-shortcut-tip { white-space: nowrap; font-size: 10px; }
+.floorplan-vertex-editor {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  background: rgba(226, 223, 212, 0.5);
+  border: 1px solid #cec8bb;
+  font-size: 11px;
+}
+.floorplan-vertex-editor > span { color: #65675c; }
+.floorplan-vertex.active { fill: #bf732f; stroke: #fff; stroke-width: 3; }
+@media (max-width: 720px) {
+  .floorplan-annotation.is-focused .floorplan-annotation-layout { grid-template-columns: minmax(0, 1fr); }
+  .floorplan-annotation.is-focused .floorplan-annotation-panel { display: none; }
+}
+
+/* Keep wheel / trackpad overscroll inside the full-screen workbench. */
+.floorplan-annotation.is-focused {
+  overscroll-behavior: contain;
+}
+.floorplan-annotation.is-focused .floorplan-annotation-panel {
+  overscroll-behavior-y: contain;
+}
+.floorplan-annotation.is-focused .floorplan-annotation-canvas-shell {
+  overscroll-behavior: contain;
+}

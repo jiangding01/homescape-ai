@@ -78,7 +78,7 @@ function parseArgs(argv: string[]) {
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2))
+  const args = parseArgs(process.argv.slice(process.argv[2] === '--' ? 3 : 2))
   const bytes = await readFile(args.inputPath)
   const registry = new FloorPlanExtractorRegistry().register(
     new MetricStructuredFloorPlanExtractor({

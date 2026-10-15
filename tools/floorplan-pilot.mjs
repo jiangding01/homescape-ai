@@ -29,6 +29,7 @@ const TAG_VALUES = {
 
 const EDIT_KEYS = [
   'roomVertexMoves',
+  'roomStructureEdits',
   'roomMetadataEdits',
   'openingGeometryEdits',
   'calibrationEdits',
@@ -500,11 +501,25 @@ function validateBenchmarkReport(value, dataset, corpusCases) {
     }
     seen.add(key)
 
+    const failures = result.failures ?? []
+
+    if (!Array.isArray(failures)) {
+      throw new Error(label + '.failures 必须是数组')
+    }
+
+    const normalizedFailures = failures.map((failure, failureIndex) =>
+      nonEmptyString(
+        failure,
+        label + '.failures[' + failureIndex + ']',
+      ),
+    )
+
     results.push({
       caseId,
       extractorId,
       gatePass: result.gatePass,
       metrics: validateMetrics(result.metrics, label),
+      failures: normalizedFailures,
     })
   }
 
@@ -673,7 +688,7 @@ function validateReviewBurden(value, label) {
 
   for (const key of EDIT_KEYS) {
     const value = nonNegativeInteger(
-      editCounts[key],
+      key === 'roomStructureEdits' && editCounts[key] === undefined ? 0 : editCounts[key],
       label + '.editCounts.' + key,
     )
     normalizedCounts[key] = value
@@ -859,6 +874,34 @@ function extractionSummary(results) {
   }
 }
 
+function failureSummary(results) {
+  const counts = new Map()
+  let failedCaseCount = 0
+  let totalFailureCount = 0
+
+  for (const result of results) {
+    if (!result.gatePass) {
+      failedCaseCount += 1
+    }
+
+    for (const failure of result.failures ?? []) {
+      counts.set(failure, (counts.get(failure) ?? 0) + 1)
+      totalFailureCount += 1
+    }
+  }
+
+  return {
+    failedCaseCount,
+    totalFailureCount,
+    failureCounts: Object.fromEntries(
+      [...counts.entries()].sort(
+        (left, right) =>
+          right[1] - left[1] || left[0].localeCompare(right[0]),
+      ),
+    ),
+  }
+}
+
 function sliceSummary(results) {
   const reviews = results
     .map((result) => result.review)
@@ -888,6 +931,7 @@ function sliceSummary(results) {
     meanTotalEdits: mean(
       reviews.map((review) => review.totalEdits),
     ),
+    failures: failureSummary(results),
   }
 }
 
@@ -951,7 +995,9 @@ function printHumanSummary(report) {
           ' · review=' +
           (extractor.review.coverage * 100).toFixed(1) +
           '% · edits=' +
-          (extractor.review.meanTotalEdits?.toFixed(2) ?? 'n/a'),
+          (extractor.review.meanTotalEdits?.toFixed(2) ?? 'n/a') +
+          ' · failures=' +
+          extractor.failures.totalFailureCount,
       ),
       '',
     ].join('\n'),
@@ -959,7 +1005,7 @@ function printHumanSummary(report) {
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2))
+  const args = parseArgs(process.argv.slice(process.argv[2] === '--' ? 3 : 2))
   const root = dirname(args.manifestPath)
   const experimentJson = await readJson(
     args.manifestPath,

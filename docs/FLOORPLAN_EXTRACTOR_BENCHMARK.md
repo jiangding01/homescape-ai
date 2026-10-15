@@ -9,7 +9,7 @@ Benchmark 的唯一 Candidate Contract 是 FloorPlanDraft v0.1。
 ## 快速运行
 
 ~~~bash
-pnpm floorplan:benchmark
+pnpm floorplan:benchmark:check-demo
 ~~~
 
 当前 Fixture 同时包含：
@@ -19,10 +19,19 @@ pnpm floorplan:benchmark
 
 默认模式检查 expectedGate 是否符合实际结果，因此 negative fixture 不会让命令失败。
 
+真实 Benchmark：
+
+~~~bash
+pnpm floorplan:benchmark -- \
+  path/to/manifest.json \
+  --report .floorplan-benchmark/report.json
+~~~
+
 如果要把某个 Extractor 当成 Release Gate：
 
 ~~~bash
-node tools/floorplan-benchmark.mjs path/to/manifest.json \
+pnpm floorplan:benchmark -- \
+  path/to/manifest.json \
   --require-pass \
   --report .floorplan-benchmark/report.json
 ~~~

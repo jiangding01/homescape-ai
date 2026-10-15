@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -26,6 +30,12 @@ jobs:
       - name: Install
         run: pnpm install --no-frozen-lockfile
 
+      - name: Root Workspace CLI smoke
+        run: |
+          node --import tsx --input-type=module -e "await import('@homescape/floorplan-extractor'); await import('@homescape/floorplan-extractor/node')"
+          pnpm floorplan:geometry:check-demo
+          pnpm floorplan:extract-demo
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -34,3 +44,24 @@ jobs:
 
       - name: Raster geometry smoke
         run: pnpm floorplan:raster:check-demo
+
+      - name: Benchmark smoke
+        run: pnpm floorplan:benchmark:check-demo
+
+      - name: Pilot evaluation smoke
+        run: pnpm floorplan:pilot:check-demo
+
+      - name: Raster pilot batch smoke
+        run: pnpm floorplan:raster:batch:check-demo
+
+      - name: Real intake smoke
+        run: pnpm floorplan:real:intake:check-demo
+
+      - name: Real extraction coverage smoke
+        run: pnpm floorplan:real:coverage:check-demo
+
+      - name: Real Ground Truth staging smoke
+        run: pnpm floorplan:gt:stage:check-demo
+
+      - name: Annotation interaction geometry smoke
+        run: pnpm floorplan:annotation:check-demo
