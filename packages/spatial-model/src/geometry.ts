@@ -12,6 +12,33 @@ export interface Bounds2D {
   depth: number
 }
 
+/**
+ * 全项目唯一的平面旋转约定（Planner、Constraint、渲染器必须共用）。
+ *
+ * 世界平面坐标为 (x, z)，y 轴向上。`yaw` 与 Babylon 右手系下
+ * `mesh.rotation.y = yaw` 的结果一致：绕 +Y 旋转 yaw 后，
+ *
+ *   局部 +X 轴 → 世界 (cos yaw, -sin yaw)
+ *   局部 +Z 轴 → 世界 (sin yaw,  cos yaw)
+ *
+ * 即 world = (lx·cos + lz·sin, -lx·sin + lz·cos)。注意它与教科书里
+ * “逆时针 (cos, sin)” 的二维旋转方向相反，业务代码不得自行写 cos/sin 旋转。
+ */
+export function rotateLocalToWorld(localX: number, localZ: number, yaw: number): Vec2 {
+  const cosine = Math.cos(yaw)
+  const sine = Math.sin(yaw)
+
+  return [localX * cosine + localZ * sine, -localX * sine + localZ * cosine]
+}
+
+/**
+ * 返回让对象局部 +X 轴指向世界方向 (dx, dz) 的 yaw（与 rotateLocalToWorld 互逆）。
+ * 例如沿墙摆放时传入墙方向，家具宽度（局部 X）即与墙平行。
+ */
+export function yawFromDirection(dx: number, dz: number) {
+  return -Math.atan2(dz, dx)
+}
+
 export function distance2D(a: Vec2, b: Vec2) {
   return Math.hypot(b[0] - a[0], b[1] - a[1])
 }

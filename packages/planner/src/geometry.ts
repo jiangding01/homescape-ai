@@ -1,4 +1,9 @@
-import { isPointInPolygon, type Polygon2D, type Vec2 } from '@homescape/spatial-model'
+import {
+  isPointInPolygon,
+  rotateLocalToWorld,
+  type Polygon2D,
+  type Vec2,
+} from '@homescape/spatial-model'
 
 export interface Footprint2D {
   center: Vec2
@@ -9,14 +14,11 @@ export interface Footprint2D {
 
 const EPSILON = 1e-7
 
+// 旋转约定统一由 spatial-model 的 rotateLocalToWorld 定义（与渲染器一致）。
 function rotatePoint(localX: number, localZ: number, yaw: number, center: Vec2): Vec2 {
-  const cosine = Math.cos(yaw)
-  const sine = Math.sin(yaw)
+  const [offsetX, offsetZ] = rotateLocalToWorld(localX, localZ, yaw)
 
-  return [
-    center[0] + localX * cosine - localZ * sine,
-    center[1] + localX * sine + localZ * cosine,
-  ]
+  return [center[0] + offsetX, center[1] + offsetZ]
 }
 
 export function footprintCorners(footprint: Footprint2D): readonly Vec2[] {
