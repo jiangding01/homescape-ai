@@ -3,6 +3,10 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
+import {
+  findCalibrationsCopiedFromCandidate,
+  getGroundTruthCalibrationBasisErrors,
+} from './floorplan-gt-calibration.mjs'
 
 const DEFAULT_GRID_SIZE = 96
 const EPSILON = 1e-9
@@ -1173,6 +1177,12 @@ function printHumanSummary(report) {
     )
   }
 
+  for (const result of report.results) {
+    for (const warning of result.warnings ?? []) {
+      process.stderr.write('warning: ' + warning + '\n')
+    }
+  }
+
   process.stderr.write('\n')
 }
 
@@ -1215,6 +1225,18 @@ async function main() {
       )
     }
 
+    const calibrationBasisErrors =
+      getGroundTruthCalibrationBasisErrors(expected)
+
+    if (calibrationBasisErrors.length > 0) {
+      throw new Error(
+        'Ground Truth 比例尺来源不合规：' +
+          benchmarkCase.id +
+          '/ground-truth: ' +
+          calibrationBasisErrors.join('；'),
+      )
+    }
+
     for (const candidateSpec of benchmarkCase.candidates) {
       const candidate = await readJson(candidateSpec.candidatePath)
       const evaluated = evaluateCase(
@@ -1236,6 +1258,21 @@ async function main() {
       }
       if (!evaluated.gatePass) gateFailure = true
 
+      // GT 标定与 Candidate 完全一致时，比例尺误差不是独立评测结果：照常计分，但显式报告
+      const copiedCalibrations = findCalibrationsCopiedFromCandidate(
+        expected,
+        candidate,
+      )
+      const warnings = copiedCalibrations.map(
+        (field) =>
+          benchmarkCase.id +
+          '/' +
+          candidateSpec.extractorId +
+          ': Ground Truth ' +
+          field +
+          ' 与 Candidate 标定完全一致，比例尺误差不独立',
+      )
+
       results.push({
         caseId: benchmarkCase.id,
         extractorId: candidateSpec.extractorId,
@@ -1246,6 +1283,7 @@ async function main() {
           : {}),
         metrics: evaluated.metrics,
         failures: evaluated.failures,
+        ...(warnings.length > 0 ? { warnings } : {}),
       })
     }
   }

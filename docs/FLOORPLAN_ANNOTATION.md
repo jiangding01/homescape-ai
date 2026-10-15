@@ -86,6 +86,8 @@ Calibration：
 - 双轴时横向标定须 |dx| ≥ |dy|、纵向标定须 |dy| ≥ |dx|，否则 Draft 无效、导入报错：方向写反会静默互换 sx / sy，误差与要修的问题同量级，不能只当警告。
 - `basis` 表示比例尺来源：`assumed`（假设 px/m，如 Raster 默认值）、`annotated`（人工沿尺寸线标注）、`extracted`（自动从图上尺寸标注读出）、`structured`（米制结构化数据换算）。缺省视为旧数据未声明来源。
 - `basis: 'assumed'` 导入时生成 `issue-calibration-assumption`（双轴时为 `issue-calibration-x/y-assumption`）待确认问题，阻断 Finalize，与墙厚 / 层高未确认一致；缺省 basis 不阻断，以兼容已有人工 GT。
+- Ground Truth 只接受 `annotated`、`structured` 或缺省 basis：`assumed` 与 `extracted` 是未经人工复核的比例尺，语料库校验（`floorplan:corpus`）、GT 入库（`floorplan:gt:stage`）与 Benchmark 会直接拒绝。VLM 等读出的尺寸只能作为 Candidate 参考，须在标注工作台中人工沿尺寸线重标并核对图上数字后，才能标为 `annotated`。
+- Benchmark 发现 GT 标定与某个 Candidate 的标定完全一致（端点 0.5 px 内、距离相同）时，在该结果的 `warnings` 中注明比例尺误差不独立；指标照常计算，不从分母移除。
 - Benchmark 分别比较 X / Y 轴比例尺（任一侧缺 Y 时回退到 X），报告新增 `scaleErrorRatioX` / `scaleErrorRatioY`，原 `scaleErrorRatio` 取两轴最大值。
 
 Assumptions：

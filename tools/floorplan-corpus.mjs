@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
+import { getGroundTruthCalibrationBasisErrors } from './floorplan-gt-calibration.mjs'
 
 const ROOM_TYPES = new Set([
   'living',
@@ -307,6 +308,14 @@ function validateGroundTruth(value, expectedKind, caseId) {
     !isValidCalibration(asRecord(draft.calibrationY))
   ) {
     throw new Error(caseId + ' Ground Truth calibrationY 无效')
+  }
+
+  const calibrationBasisErrors = getGroundTruthCalibrationBasisErrors(draft)
+
+  if (calibrationBasisErrors.length > 0) {
+    throw new Error(
+      caseId + ' Ground Truth ' + calibrationBasisErrors.join('；'),
+    )
   }
 
   const assumptions = asRecord(draft.assumptions)

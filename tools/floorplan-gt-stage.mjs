@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
+import { getGroundTruthCalibrationBasisErrors } from './floorplan-gt-calibration.mjs'
 
 const hash = (x) => createHash('sha256').update(x).digest('hex')
 const hex = (s) => typeof s === 'string' && /^[0-9a-f]{64}$/.test(s)
@@ -97,6 +98,8 @@ async function main() {
       if (!obj(gt)||gt.schemaVersion!=='0.1.0'||gt.source?.kind!=='floorplan_image'||
           gt.source?.sourceLabel!==c.id||!Array.isArray(gt.rooms)||!gt.rooms.length||
           !Array.isArray(gt.openings)) fail(c.id+' GT 基础合同/Case ID 不匹配')
+      const basisErrors=getGroundTruthCalibrationBasisErrors(gt)
+      if (basisErrors.length) fail(c.id+' GT '+basisErrors.join('；'))
       approved.push({id:c.id,sourceKind:'floorplan_image',mediaType:c.mediaType,
         sourcePath:c.sourcePath,groundTruthPath:c.groundTruthPath,tags:tagsOf(c)})
     } else if (c.tagsReviewed===true || c.approvedGroundTruthSha256) {
