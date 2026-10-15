@@ -105,7 +105,7 @@ describe('VisionFloorPlanExtractor', () => {
       inputTokens: 1200,
       outputTokens: 800,
       traceId: 'req_test',
-      promptVersion: 'floorplan-vision-prompt-v2',
+      promptVersion: 'floorplan-vision-prompt-v3',
     })
     expect(result.metadata.requestFingerprint).toMatch(/^[a-f0-9]{64}$/)
     expect(client.requests[0]!.userPrompt).toContain('500 x 400 pixels')

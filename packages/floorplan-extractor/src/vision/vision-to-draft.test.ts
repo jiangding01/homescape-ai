@@ -198,6 +198,59 @@ describe('visionResponseToDraft', () => {
     expect(opening.offsetPx + opening.widthPx).toBeLessThanOrEqual(500)
   })
 
+  it('斜边（长度非 0.1 整倍数）上的开口取整后仍不超出边长', () => {
+    const response = syntheticVisionResponse()
+    // 凸窗式房间：左侧斜边长度为无理数
+    response.rooms = [
+      {
+        label: '阳台',
+        type: 'balcony',
+        polygon: [
+          { x: 100, y: 100 },
+          { x: 103.7, y: 87.4 },
+          { x: 133.5, y: 87.4 },
+          { x: 137.2, y: 100 },
+        ],
+        confidence: 0.6,
+      },
+    ]
+    response.openings = [
+      {
+        kind: 'window',
+        start: { x: 100, y: 100 },
+        end: { x: 103.7, y: 87.4 },
+        swing: 'none',
+        confidence: 0.5,
+      },
+      {
+        kind: 'window',
+        start: { x: 103.7, y: 87.4 },
+        end: { x: 133.5, y: 87.4 },
+        swing: 'none',
+        confidence: 0.5,
+      },
+      {
+        kind: 'window',
+        start: { x: 133.5, y: 87.4 },
+        end: { x: 137.2, y: 100 },
+        swing: 'none',
+        confidence: 0.5,
+      },
+    ]
+    const { draft } = visionResponseToDraft(response, options)
+
+    expect(draft.openings).toHaveLength(3)
+    for (const opening of draft.openings) {
+      const room = draft.rooms.find((candidate) => candidate.id === opening.roomId)!
+      const a = room.boundaryPx[opening.edgeIndex]!
+      const b = room.boundaryPx[(opening.edgeIndex + 1) % room.boundaryPx.length]!
+      // 与 Benchmark 的 Draft 校验相同：不留取整余量
+      expect(opening.offsetPx + opening.widthPx).toBeLessThanOrEqual(
+        Math.hypot(b[0] - a[0], b[1] - a[1]) + 1e-9,
+      )
+    }
+  })
+
   it('同一份响应总是得到逐字节相同的 Draft', () => {
     const first = JSON.stringify(visionResponseToDraft(syntheticVisionResponse(), options))
     const second = JSON.stringify(visionResponseToDraft(syntheticVisionResponse(), options))
