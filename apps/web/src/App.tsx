@@ -970,7 +970,7 @@ export function App() {
         </article>
       </section>
 
-      <footer>PR #13 · Ground Truth Annotation · 下一步：Real Corpus Pilot + Geometry Baseline</footer>
+      <footer>HomeScape AI · 对话式家装空间设计</footer>
     </main>
   )
 }
