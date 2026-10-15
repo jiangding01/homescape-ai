@@ -244,6 +244,28 @@ export function markCalibrationAnnotated<T extends FloorPlanCalibration>(calibra
 }
 
 /**
+ * Ground Truth 只接受人工标注、结构化换算或旧数据未声明来源的标定；
+ * assumed / extracted 未经人工复核，与语料库校验规则一致。
+ */
+export function getGroundTruthCalibrationBasisIssues(draft: {
+  calibration: FloorPlanCalibration
+  calibrationY?: FloorPlanCalibration
+}): string[] {
+  const issues: string[] = []
+  for (const [label, calibration] of [
+    ['横向', draft.calibration],
+    ['纵向', draft.calibrationY],
+  ] as const) {
+    if (calibration?.basis === 'assumed') {
+      issues.push(label + '标尺仍是假设值，请拖动端点或核对距离后确认')
+    } else if (calibration?.basis === 'extracted') {
+      issues.push(label + '标尺为自动读出的候选值，请人工沿尺寸线复核')
+    }
+  }
+  return issues
+}
+
+/**
  * 新增纵向标尺的初始值：放在图像左侧、竖直居中，长度取图高一半。
  * 距离按横向标尺的 px/m 推算（横向距离 ≤ 0 时记为 0 让标注者填写），
  * 属于假设值，basis 固定为 `assumed`，直到人工拖动或修改距离。

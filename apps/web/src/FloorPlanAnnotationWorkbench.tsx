@@ -24,7 +24,7 @@ import {
   saveAnnotationDraft,
   type StoredAnnotationDraft,
 } from './floorplan-annotation-draft-store'
-import { clickNearStart, clampViewport, createVerticalCalibration, fullViewport, moveCalibrationEndpoint, removeVerticalCalibration, setCalibrationDistance, type CalibrationAxisKey, insertPolygonVertex, nearestEdgeProjection, nextEntityId, orthogonalEdge, orthogonalPoint, planOpeningFromClicks, projectPointToEdge, removePolygonVertex, screenToSource, viewportScreenScale, zoomViewport, type AnnotationViewport } from './floorplan-annotation-geometry'
+import { clickNearStart, clampViewport, createVerticalCalibration, fullViewport, getGroundTruthCalibrationBasisIssues, moveCalibrationEndpoint, removeVerticalCalibration, setCalibrationDistance, type CalibrationAxisKey, insertPolygonVertex, nearestEdgeProjection, nextEntityId, orthogonalEdge, orthogonalPoint, planOpeningFromClicks, projectPointToEdge, removePolygonVertex, screenToSource, viewportScreenScale, zoomViewport, type AnnotationViewport } from './floorplan-annotation-geometry'
 import { lockAnnotationBackgroundScroll } from './floorplan-annotation-scroll-lock'
 
 const roomTypeOptions: Array<{ value: RoomType; label: string }> = [
@@ -838,6 +838,7 @@ export function FloorPlanAnnotationWorkbench({
       ...(workingDraft.source.kind === 'floorplan_pdf'
         ? ['暂不支持 PDF 原图视觉复核']
         : []),
+      ...getGroundTruthCalibrationBasisIssues(workingDraft),
       ...(drawingPoints !== null ? ['房间多边形尚未绘制完成'] : []),
       ...(!geometryReviewed ? ['请人工核对全部房间与开口后确认'] : []),
       ...(sourceImage && !aspectRatioCompatible

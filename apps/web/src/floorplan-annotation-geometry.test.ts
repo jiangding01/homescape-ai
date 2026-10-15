@@ -2,6 +2,7 @@ import { getFloorPlanCalibrationAxisError, type FloorPlanCalibration, type Floor
 import { describe, expect, it } from 'vitest'
 import {
   createVerticalCalibration,
+  getGroundTruthCalibrationBasisIssues,
   markCalibrationAnnotated,
   moveCalibrationEndpoint,
   removeVerticalCalibration,
@@ -206,5 +207,32 @@ describe('calibration helpers', () => {
     const next = removeVerticalCalibration(withY)
     expect('calibrationY' in next).toBe(false)
     expect(next.calibration).toBe(horizontal)
+  })
+})
+
+describe('getGroundTruthCalibrationBasisIssues', () => {
+  const base: FloorPlanCalibration = { startPx: [0, 0], endPx: [100, 0], realDistanceMeters: 2 }
+
+  it('人工标注与旧数据缺省 basis 可以导出', () => {
+    expect(getGroundTruthCalibrationBasisIssues({ calibration: base })).toEqual([])
+    expect(getGroundTruthCalibrationBasisIssues({
+      calibration: { ...base, basis: 'annotated' },
+      calibrationY: { startPx: [0, 0], endPx: [0, 100], realDistanceMeters: 2, basis: 'structured' },
+    })).toEqual([])
+  })
+
+  it('新增后未确认的纵向标尺与自动读出的标定阻断导出', () => {
+    const vertical = createVerticalCalibration(base, 400, 300)
+    const issues = getGroundTruthCalibrationBasisIssues({
+      calibration: { ...base, basis: 'extracted' },
+      calibrationY: vertical,
+    })
+    expect(issues).toHaveLength(2)
+    expect(issues[0]).toContain('横向')
+    expect(issues[1]).toContain('纵向')
+    expect(getGroundTruthCalibrationBasisIssues({
+      calibration: base,
+      calibrationY: markCalibrationAnnotated(vertical),
+    })).toEqual([])
   })
 })

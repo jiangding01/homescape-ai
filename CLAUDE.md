@@ -25,7 +25,7 @@
 pnpm install
 pnpm dev                      # web :5173 + api :3001
 pnpm typecheck
-pnpm test                     # vitest，测试文件为 src/**/*.test.ts
+pnpm test                     # vitest，测试文件为 src/**/*.test.ts 与 tools/**/*.test.mjs
 pnpm build
 pnpm floorplan:raster:check-demo   # 其余 *:check-demo 见 package.json
 ```
