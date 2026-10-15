@@ -18,5 +18,7 @@ GT 变化后必须重新人工确认并更新固定 SHA；原图 SHA 不一致�
 正式 Corpus Gate 负责完整 GT 几何合同，Coverage 负责按 Source SHA 关联 Intake 提取失败证据；两者都不能把自动 Candidate 冒充 GT 或将提取失败解释成零 IoU。
 
 截至 2026-10-12，case-001 已通过用户本地正式单 Case Corpus Gate，case-004、case-b005、case-b008 的人工 GT 仍待完成。
+
+2026-10-15 更新：Stage 扩为 5 Case（Dataset `pr17-real-5case-gt-v1`），新增 case-b011。case-001、case-004 已批准；case-b005、case-b011 已有 Draft（`draft-annotations/`，仅为 Candidate，待 Workbench 人工审核）；case-b008 原图尺寸数字不可辨认，比例尺只能保持 `assumed`，暂停但保留 pending，不移出语料与覆盖率分母。旧 4 Case 报告已归档，Corpus Gate 与 Coverage 已按新 Dataset 重新生成。
 4 Case Dataset 名称不同于之前单 Case Dataset，扩容后应重新生成 Dataset Fingerprint，不可复用旧 Summary 与 Coverage。
 真实图片、Ground Truth 与 Review Burden 必须保留私有，绝不提交公开仓库。

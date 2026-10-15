@@ -276,4 +276,4 @@ node tools/floorplan-real-coverage.mjs \
 
 ## 四个代表 Case 的分阶段 Ground Truth
 
-用 [FLOORPLAN_REAL_GT_STAGING.md](FLOORPLAN_REAL_GT_STAGING.md) 的 stage.json 显式批准 GT；私有文件只留在 .floorplan-corpus。Stage 生成只含已确认 Case 的 Corpus Manifest，并通过原有 Corpus Gate 和 Coverage 工具复核，避免将未生成的 Candidate 转换为零 IoU。case-001 已正式验证；case-004、case-b005、case-b008 仍需人工审核。
+用 [FLOORPLAN_REAL_GT_STAGING.md](FLOORPLAN_REAL_GT_STAGING.md) 的 stage.json 显式批准 GT；私有文件只留在 .floorplan-corpus。Stage 生成只含已确认 Case 的 Corpus Manifest，并通过原有 Corpus Gate 和 Coverage 工具复核，避免将未生成的 Candidate 转换为零 IoU。case-001、case-004 已批准；case-b005、case-b011 的 Draft 待人工审核，case-b008 因比例尺无法确认暂停（见 FLOORPLAN_REAL_GT_STAGING.md）。

@@ -335,7 +335,7 @@ PR #16 已把 PNG / JPEG 像素接入 Geometry Observation，并通过 Synthetic
 - [x] 20 张真实图片默认墙线扫描的独立诊断（非正式 Benchmark）
 - [ ] 准备第一批 10 张去敏真实户型图
 - [x] 补齐 PR #13 Workbench 的空白图建档、多边形绘制、Room / Opening 增删及显式人工确认（PR #17）
-- [ ] 用 PR #13 Workbench 完成 4 个代表 Case 的人工 Ground Truth（case-001 / case-004 / case-b005 / case-b008）
+- [ ] 用 PR #13 Workbench 完成代表 Case 的人工 Ground Truth（已批准 case-001 / case-004；case-b005 / case-b011 草稿待审核；case-b008 比例尺不可确认，暂停）
 - [ ] 跑 PR #12 Corpus Check 生成真实 datasetFingerprint
 - [ ] 用 PR #16 Raster Detector 生成 Candidate
 - [ ] 人工 Review + Burden
