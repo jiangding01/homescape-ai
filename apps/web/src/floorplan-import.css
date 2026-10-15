@@ -715,3 +715,55 @@
 .floorplan-annotation.is-focused .floorplan-annotation-canvas-shell {
   overscroll-behavior: contain;
 }
+
+/* Constant on-screen handles: radii are converted from screen px in the component. */
+.floorplan-handle-hit {
+  fill: transparent;
+  stroke: none;
+  cursor: grab;
+}
+.floorplan-handle-hit:active { cursor: grabbing; }
+.floorplan-annotation-canvas.is-placing { cursor: crosshair; }
+.floorplan-annotation-canvas.is-placing .floorplan-handle-hit { cursor: crosshair; }
+
+/* Canvas opening placement */
+.floorplan-opening-edge-hint {
+  stroke: #c16a23;
+  stroke-width: 3;
+  stroke-opacity: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+.floorplan-opening-preview {
+  stroke: #9a5b42;
+  stroke-width: 10;
+  stroke-linecap: round;
+  stroke-opacity: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+.floorplan-opening-snap {
+  fill: #fff;
+  stroke: #c16a23;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Draft autosave / restore */
+.floorplan-draft-status { font-size: 11px; color: #65675c; }
+.floorplan-draft-status.is-warning { color: #8c5545; }
+.floorplan-restore-banner {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #d8c6ba;
+  background: #f7eee7;
+  font-size: 12px;
+}
+.floorplan-restore-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.floorplan-restore-row > span { flex: 1 1 320px; min-width: 0; }
+.floorplan-restore-row button {
+  padding: 3px 8px;
+  border: 1px solid #bdb6aa;
+  background: #fffdf8;
+  cursor: pointer;
+  font-size: 11px;
+}
