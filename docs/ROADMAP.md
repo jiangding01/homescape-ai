@@ -300,6 +300,15 @@
 
 ## 下一阶段候选
 
+### 户型识别策略调整（ADR-0017，2026-10-15）
+
+- [x] PR #17 已合并：真实户型 Intake / Coverage / GT Stage 工具与标注工作台增强；评测工具从此冻结
+- [x] case-004 正式 Benchmark：Raster Extractor 房间召回 0%、比例尺误差 84%
+- [x] 视觉大模型盲测（2 Case）：房间 IoU 98%、比例尺误差 < 1%、门窗召回约 80%
+- [ ] 比例尺横纵分轴标定与来源字段
+- [ ] 标注工作台：画布放置门窗、草稿自动保存、手柄按屏幕尺寸
+- [ ] 可复现的视觉大模型 Extractor（需服务端 API Key），20 张样本复测
+
 ### PR #17 — Real 10 Case Raster Pilot
 
 PR #16 已把 PNG / JPEG 像素接入 Geometry Observation，并通过 Synthetic E2E 验证 Decoder → Detector → Reconstructor 链路。
