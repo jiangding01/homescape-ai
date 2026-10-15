@@ -24,7 +24,7 @@ import {
   saveAnnotationDraft,
   type StoredAnnotationDraft,
 } from './floorplan-annotation-draft-store'
-import { clickNearStart, clampViewport, createVerticalCalibration, fullViewport, getGroundTruthCalibrationBasisIssues, moveCalibrationEndpoint, removeVerticalCalibration, setCalibrationDistance, type CalibrationAxisKey, insertPolygonVertex, nearestEdgeProjection, nextEntityId, orthogonalEdge, orthogonalPoint, planOpeningFromClicks, projectPointToEdge, removePolygonVertex, screenToSource, viewportScreenScale, zoomViewport, type AnnotationViewport } from './floorplan-annotation-geometry'
+import { clickNearStart, clampViewport, createVerticalCalibration, fitOpeningsToRoomEdges, fullViewport, getGroundTruthCalibrationBasisIssues, OPENING_EDGE_TOLERANCE_PX, moveCalibrationEndpoint, removeVerticalCalibration, setCalibrationDistance, type CalibrationAxisKey, insertPolygonVertex, nearestEdgeProjection, nextEntityId, orthogonalEdge, orthogonalPoint, planOpeningFromClicks, projectPointToEdge, removePolygonVertex, screenToSource, viewportScreenScale, zoomViewport, type AnnotationViewport } from './floorplan-annotation-geometry'
 import { lockAnnotationBackgroundScroll } from './floorplan-annotation-scroll-lock'
 
 const roomTypeOptions: Array<{ value: RoomType; label: string }> = [
@@ -418,7 +418,7 @@ function getDraftIssues(draft: FloorPlanDraft) {
 
     if (
       opening.offsetPx + opening.widthPx >
-      pointDistance(start, end) + 0.5
+      pointDistance(start, end) + OPENING_EDGE_TOLERANCE_PX
     ) {
       issues.push(opening.id + ' 超出所属 Room Edge')
     }
@@ -1401,7 +1401,8 @@ export function FloorPlanAnnotationWorkbench({
       ...room,
       confidence: 1,
     })),
-    openings: workingDraft.openings.map((opening) => ({
+    // 取整噪声可能让门窗越过墙边不到 0.5 px，导出前收回墙边，避免语料库 Gate 拒收。
+    openings: fitOpeningsToRoomEdges(workingDraft.rooms, workingDraft.openings).map((opening) => ({
       ...opening,
       confidence: 1,
     })),

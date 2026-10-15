@@ -186,6 +186,52 @@ export type OpeningPlacement =
 const round2 = (value: number) => Math.round(value * 100) / 100
 
 /**
+ * 把门窗区间收进所属墙边：offset / width 取两位小数，且保证
+ * `offsetPx + widthPx <= edgeLengthPx + 1e-9`（与语料库 Gate 的比较一致）。
+ * 独立取整 offset 与 width 可能让终点越过墙边不到 0.01 px，语料库 Gate 会拒收。
+ */
+export function fitOpeningSpanToEdge(
+  offsetPx: number,
+  widthPx: number,
+  edgeLengthPx: number,
+): { offsetPx: number; widthPx: number } {
+  const edge = Math.max(0, edgeLengthPx)
+  const offset = Math.min(Math.max(0, round2(offsetPx)), Math.floor(edge * 100) / 100)
+  const end = Math.min(round2(offsetPx + widthPx), edge)
+  let width = Math.max(0, Math.floor((end - offset) * 100 + 1e-6) / 100)
+  while (width > 0 && offset + width > edge + 1e-9) width = Math.max(0, round2(width - 0.01))
+  return { offsetPx: offset, widthPx: width }
+}
+
+/** 工作台允许的门窗越界容差（px）；超出此值由 Gate 拦下，交给标注者处理。 */
+export const OPENING_EDGE_TOLERANCE_PX = 0.5
+
+/**
+ * 导出 Ground Truth 前收拢门窗：仅当门窗越过所属墙边且越界量在容差内
+ * （取整噪声）时，用 fitOpeningSpanToEdge 收回墙边；其余门窗原样保留。
+ */
+export function fitOpeningsToRoomEdges<T extends FloorPlanDraftOpening>(
+  rooms: readonly Pick<FloorPlanDraftRoom, 'id' | 'boundaryPx'>[],
+  openings: readonly T[],
+): T[] {
+  return openings.map((opening) => {
+    const room = rooms.find((r) => r.id === opening.roomId)
+    const start = room?.boundaryPx[opening.edgeIndex]
+    const end = room?.boundaryPx[(opening.edgeIndex + 1) % room.boundaryPx.length]
+    if (!start || !end) return opening
+    const edgeLengthPx = Math.hypot(end[0] - start[0], end[1] - start[1])
+    const overrun = opening.offsetPx + opening.widthPx - edgeLengthPx
+    if (overrun <= 0 || overrun > OPENING_EDGE_TOLERANCE_PX) return opening
+    return { ...opening, ...fitOpeningSpanToEdge(opening.offsetPx, opening.widthPx, edgeLengthPx) }
+  })
+}
+
+/** 标尺端点吸附到 0.01 px，去掉屏幕坐标换算带来的亚像素噪声（如 40.00005）。 */
+export function snapCalibrationPoint(point: PixelPoint): PixelPoint {
+  return [round2(point[0]) + 0, round2(point[1]) + 0]
+}
+
+/**
  * Bind two canvas clicks to an Opening: the first click picks the nearest wall
  * edge, the second is projected onto that same edge. Both are clamped to the
  * edge, so the result always fits inside it.
@@ -208,8 +254,8 @@ export function planOpeningFromClicks(
   if (!b || b.distancePx > maxDistancePx) {
     return { ok: false, reason: '第二点需要落在与第一点相同的墙边附近' }
   }
-  const offsetPx = round2(Math.min(a.alongPx, b.alongPx))
-  const widthPx = round2(Math.abs(a.alongPx - b.alongPx))
+  const { offsetPx, widthPx } = fitOpeningSpanToEdge(
+    Math.min(a.alongPx, b.alongPx), Math.abs(a.alongPx - b.alongPx), a.edgeLengthPx)
   if (widthPx < minWidthPx) {
     return { ok: false, reason: '两点距离太近，门窗宽度不足，请拉开两点' }
   }
@@ -307,7 +353,7 @@ export function moveCalibrationEndpoint<T extends { calibration: FloorPlanCalibr
     ...draft,
     [axis]: markCalibrationAnnotated({
       ...target,
-      [endpoint === 'start' ? 'startPx' : 'endPx']: point,
+      [endpoint === 'start' ? 'startPx' : 'endPx']: snapCalibrationPoint(point),
     }),
   }
 }

@@ -2,6 +2,9 @@ import { getFloorPlanCalibrationAxisError, type FloorPlanCalibration, type Floor
 import { describe, expect, it } from 'vitest'
 import {
   createVerticalCalibration,
+  fitOpeningSpanToEdge,
+  fitOpeningsToRoomEdges,
+  snapCalibrationPoint,
   getGroundTruthCalibrationBasisIssues,
   markCalibrationAnnotated,
   moveCalibrationEndpoint,
@@ -234,5 +237,82 @@ describe('getGroundTruthCalibrationBasisIssues', () => {
       calibration: base,
       calibrationY: markCalibrationAnnotated(vertical),
     })).toEqual([])
+  })
+})
+
+describe('fitOpeningSpanToEdge', () => {
+  it('keeps independently rounded offset + width inside the edge', () => {
+    // 旧实现：offset 10.006→10.01、width 22.986→22.99，终点 33.00 越过 32.995 的墙边。
+    const fit = fitOpeningSpanToEdge(10.006, 22.986, 32.995)
+    expect(fit.offsetPx + fit.widthPx).toBeLessThanOrEqual(32.995)
+    expect(fit).toEqual({ offsetPx: 10.01, widthPx: 22.98 })
+  })
+
+  it('leaves already-fitting two-decimal values unchanged', () => {
+    expect(fitOpeningSpanToEdge(40, 50, 200)).toEqual({ offsetPx: 40, widthPx: 50 })
+    expect(fitOpeningSpanToEdge(0.1, 0.2, 0.3)).toEqual({ offsetPx: 0.1, widthPx: 0.2 })
+  })
+
+  it('clamps an opening that runs past the edge end', () => {
+    expect(fitOpeningSpanToEdge(0, 12.004, 11.976)).toEqual({ offsetPx: 0, widthPx: 11.97 })
+  })
+
+  it('never overruns for arbitrary spans on irrational edges', () => {
+    let seed = 7
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    for (let i = 0; i < 5000; i += 1) {
+      const edge = 1 + rand() * 500
+      const a = rand() * edge
+      const b = rand() * edge
+      const fit = fitOpeningSpanToEdge(Math.min(a, b), Math.abs(a - b), edge)
+      expect(fit.offsetPx).toBeGreaterThanOrEqual(0)
+      expect(fit.widthPx).toBeGreaterThanOrEqual(0)
+      expect(fit.offsetPx + fit.widthPx).toBeLessThanOrEqual(edge + 1e-9)
+      expect(Math.round(fit.offsetPx * 100) / 100).toBe(fit.offsetPx)
+      expect(Math.round(fit.widthPx * 100) / 100).toBe(fit.widthPx)
+    }
+  })
+})
+
+describe('planOpeningFromClicks edge fit', () => {
+  it('stays inside a non-integer diagonal edge when clicking past its end', () => {
+    const diag = { id: 'r1', boundaryPx: [[0, 0], [7.123, 31.217], [0, 40]] as PixelPoint[] }
+    const edge = Math.hypot(7.123, 31.217)
+    const plan = planOpeningFromClicks(diag, [], [0.004, 0.0175], [9, 40], { minWidthPx: 1 })
+    expect(plan.ok).toBe(true)
+    if (plan.ok) expect(plan.offsetPx + plan.widthPx).toBeLessThanOrEqual(edge)
+  })
+})
+
+describe('fitOpeningsToRoomEdges', () => {
+  const roomA = { id: 'r1', boundaryPx: [[0, 0], [32.995, 0], [32.995, 20], [0, 20]] as PixelPoint[] }
+
+  it('pulls a sub-tolerance overrun back inside the edge', () => {
+    const [fit] = fitOpeningsToRoomEdges([roomA], [opening({ offsetPx: 0, widthPx: 33 })])
+    expect(fit).toMatchObject({ id: 'o1', offsetPx: 0, widthPx: 32.99 })
+  })
+
+  it('leaves fitting openings and large overruns untouched', () => {
+    const inside = opening({ offsetPx: 1.234, widthPx: 5.678 })
+    const far = opening({ id: 'o2', offsetPx: 0, widthPx: 40 })
+    const [a, b] = fitOpeningsToRoomEdges([roomA], [inside, far])
+    expect(a).toBe(inside)
+    expect(b).toBe(far)
+  })
+})
+
+describe('snapCalibrationPoint', () => {
+  it('drops sub-pixel noise from dragged endpoints', () => {
+    expect(snapCalibrationPoint([40.00005, 119.99999])).toEqual([40, 120])
+    expect(snapCalibrationPoint([-0.001, 12.345])).toEqual([0, 12.35])
+  })
+
+  it('is applied by moveCalibrationEndpoint', () => {
+    const draft = {
+      calibration: { startPx: [0, 0], endPx: [100, 0], realDistanceMeters: 4, basis: 'assumed' } as FloorPlanCalibration,
+    }
+    const moved = moveCalibrationEndpoint(draft, 'calibration', 'end', [40.00005, 0.000001])
+    expect(moved.calibration.endPx).toEqual([40, 0])
+    expect(moved.calibration.basis).toBe('annotated')
   })
 })
