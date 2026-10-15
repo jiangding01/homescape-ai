@@ -836,7 +836,7 @@ export function FloorPlanAnnotationWorkbench({
         ? ['图片户型 Ground Truth 导出前必须加载对应原图']
         : []),
       ...(workingDraft.source.kind === 'floorplan_pdf'
-        ? ['PR #13 暂不支持 PDF 原图视觉复核']
+        ? ['暂不支持 PDF 原图视觉复核']
         : []),
       ...(drawingPoints !== null ? ['房间多边形尚未绘制完成'] : []),
       ...(!geometryReviewed ? ['请人工核对全部房间与开口后确认'] : []),
@@ -887,7 +887,7 @@ export function FloorPlanAnnotationWorkbench({
     }
 
     if (!file.type.startsWith('image/')) {
-      setAnnotationError('PR #13 Overlay 当前只支持图片，PDF 后续单独接入')
+      setAnnotationError('原图叠加当前只支持图片，PDF 后续单独接入')
       return
     }
 
