@@ -246,7 +246,7 @@ export function FloorPlanImportWorkbench({
     <section className="floorplan-import-section">
       <div className="floorplan-import-copy">
         <div className="eyebrow">
-          PR #13 · GROUND TRUTH ANNOTATION
+          GROUND TRUTH ANNOTATION
         </div>
         <h2>把真实户型原图和结构化 Draft 放到同一张校正画布。</h2>
         <p>
