@@ -162,20 +162,45 @@ interface EdgeMatch {
   distancePx: number
 }
 
-function matchOpeningToEdge(
+/**
+ * 隔墙两侧的房间都能贴合同一个开口，此时按房间类型决定挂在哪一侧（数字小者优先）：
+ * 门窗挂在“被进入”的功能房间（卫、厨、卧、书）上，其次客餐厅，阳台 / 储物 / 走廊最后。
+ * 与现有人工 GT 的多数约定一致；Benchmark 对隔墙开口两侧都算匹配，这里只求结果稳定。
+ */
+const OPENING_HOST_PRIORITY: Record<FloorPlanDraftRoom['type'] & string, number> = {
+  bathroom: 0,
+  kitchen: 1,
+  bedroom: 2,
+  study: 2,
+  living: 3,
+  dining: 3,
+  other: 4,
+  utility: 5,
+  hallway: 6,
+  balcony: 7,
+}
+
+function hostPriority(room: FloorPlanDraftRoom) {
+  return room.type ? OPENING_HOST_PRIORITY[room.type] : OPENING_HOST_PRIORITY.other
+}
+
+/** 每个房间里与开口最贴合的那条平行边（距离不超过 maxDistancePx）。 */
+function matchOpeningToRoomEdges(
   start: PixelPoint,
   end: PixelPoint,
   rooms: readonly FloorPlanDraftRoom[],
   maxDistancePx: number,
-): EdgeMatch | undefined {
+): EdgeMatch[] {
   const sdx = end[0] - start[0]
   const sdy = end[1] - start[1]
   const segmentLength = Math.hypot(sdx, sdy)
-  if (segmentLength < 1) return undefined
+  if (segmentLength < 1) return []
 
-  let best: EdgeMatch | undefined
+  const matches: EdgeMatch[] = []
 
   rooms.forEach((room, roomIndex) => {
+    let best: EdgeMatch | undefined
+
     room.boundaryPx.forEach((a, edgeIndex) => {
       const b = room.boundaryPx[(edgeIndex + 1) % room.boundaryPx.length]!
       const ex = b[0] - a[0]
@@ -213,9 +238,23 @@ function matchOpeningToEdge(
         }
       }
     })
+
+    if (best) matches.push(best)
   })
 
-  return best
+  return matches
+}
+
+function chooseOpeningHost(
+  matches: readonly EdgeMatch[],
+  rooms: readonly FloorPlanDraftRoom[],
+): EdgeMatch | undefined {
+  return [...matches].sort(
+    (a, b) =>
+      hostPriority(rooms[a.roomIndex]!) - hostPriority(rooms[b.roomIndex]!) ||
+      a.distancePx - b.distancePx ||
+      a.roomIndex - b.roomIndex,
+  )[0]
 }
 
 /**
@@ -349,11 +388,9 @@ export function visionResponseToDraft(
 
   const openings: FloorPlanDraftOpening[] = []
   response.openings.forEach((opening: VisionOpening, index) => {
-    const match = matchOpeningToEdge(
-      toSource(opening.start),
-      toSource(opening.end),
+    const match = chooseOpeningHost(
+      matchOpeningToRoomEdges(toSource(opening.start), toSource(opening.end), rooms, maxDistancePx),
       rooms,
-      maxDistancePx,
     )
     if (!match) {
       warnings.push(

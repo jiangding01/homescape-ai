@@ -117,12 +117,14 @@ room edge start
 
 再按：
 
-- matched room
+- matched room（或隔墙另一侧房间的匹配，见下）
 - same kind
 - nearest center
 - normalized center tolerance
 
 做一对一匹配。
+
+隔墙上的门窗是同一个物理开口，挂在墙哪一侧的房间只是标注约定。GT Opening 所在边的平行对侧（距离不超过 GT 墙厚 + 0.1 m，至少一半开口宽度落在对侧边上）若有其他房间，Candidate 把开口挂在该房间的匹配房间上也算同一房间。中心容差、类型、宽度误差不变；外墙开口不受影响。报告中 `openingSharedWallMatches` 记录有多少匹配是经由墙另一侧房间得到的，便于核对该规则对指标的影响。
 
 Width Error 单独计算，避免“中心点对了但门宽严重错误”仍然通过。
 

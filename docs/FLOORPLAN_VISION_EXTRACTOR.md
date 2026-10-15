@@ -7,7 +7,7 @@ ADR-0017 把户型识别主路径改为“视觉大模型预填 + 人工确认�
 ```text
 PNG / JPEG (.floorplan-corpus/, Intake Manifest)
 → 预检查（SHA / 路径 / 尺寸，全部 Case 先过）
-→ 确定性预处理（EXIF 校正 → 白底 → 长边缩放到 1568 → PNG）
+→ 确定性预处理（EXIF 校正 → 白底 → 长边缩放到 1200~1568 之间 → PNG）
 → 视觉模型单次调用（Structured Outputs 约束 JSON）
 → 原始响应落盘（responses/）
 → 本地严格校验 → FloorPlanDraft Candidate（generated_unverified）
@@ -29,14 +29,15 @@ PNG / JPEG (.floorplan-corpus/, Intake Manifest)
 - 坐标从模型图像换回原图像素；去掉闭合重复点；面积过小的多边形丢弃并告警
 - 比例尺按横纵两轴分别处理：偏离中位数超过 15% 的读数视为误读，不参与；取最接近中位数的那条图上尺寸线作为标定线（端点保持图上位置），`basis: extracted`
 - 只有单轴尺寸线时，另一轴暂按同一 px/m 处理并标记 `basis: assumed`，导入后阻断 Finalize；完全没有尺寸线时用 `--assumed-pixels-per-meter`，`basis: assumed`，导入后阻断 Finalize
-- 门窗绑定到最近的平行房间边（距离上限 0.4 m，至少一半宽度落在边上），贴不上的丢弃并告警
+- 门窗绑定到平行房间边（距离上限 0.4 m，至少一半宽度落在边上），贴不上的丢弃并告警
+- 隔墙上的门窗两侧房间都能贴合时，按房间类型挂载：卫生间 → 厨房 → 卧室 / 书房 → 客餐厅 → 其他 → 储物 → 走廊 → 阳台（前者优先），即挂在“被进入”的功能房间一侧。这与现有人工 GT 的多数约定一致；只按距离选会把卧室门、厨房门挂到客厅一侧（Prompt v1 下 case-001 / 004 的 9 个门因此被记为漏检）
 - 墙厚 0.24 m、层高 2.8 m、门高 2.1 m、窗高 1.5 m / 窗台 0.9 m 均为未确认占位值
 
 ## 可复现性
 
 大模型本身不保证逐字节相同输出（当前模型不接受 temperature），因此可复现分三层：
 
-1. **配置固定**：模型 ID、effort、长边上限、Prompt 版本与哈希、Schema、预处理器（含 libvips 版本）都写入报告 `config`，每个 Case 记录请求指纹。
+1. **配置固定**：模型 ID、effort、长边上下限、Prompt 版本与哈希、Schema、预处理器（含 libvips 版本）都写入报告 `config`，每个 Case 记录请求指纹。
 2. **转换可回放**：原始响应保存在 `<run-dir>/responses/`。`--replay` 不调用模型、不需要 Key，重新生成 Candidate 并核对与原运行逐字节一致（`replayMismatchCount` 必须为 0）。配置或 Prompt 改了，指纹不匹配，回放直接失败。
 3. **运行间可比**：同一批图片跑两次，用 `floorplan:vision:compare` 量化差异（房间匹配率、匹配 IoU、客厅 IoU、横纵比例尺相对差、门窗匹配率）。失败原因不同不算一致，缺值 Case 单独计数。这衡量稳定性，不是准确率。
 
@@ -72,7 +73,14 @@ pnpm floorplan:vision:compare -- .floorplan-corpus/pilot-a/intake.json \
   --report .floorplan-corpus/pilot-a/vision-runs/compare-1-2.json
 ```
 
-其他参数：`--model`、`--effort`、`--max-long-edge`、`--concurrency`、`--cases case-001,case-004`。
+其他参数：`--model`、`--effort`、`--max-long-edge`、`--min-long-edge`、`--concurrency`、`--cases case-001,case-004`。
+
+`--min-long-edge`（默认 1200，0 为不放大）：网络户型图多为 700~800 px，门弧、窗线只有几个像素，先等比放大再送模型。回放旧报告时，报告里没有该字段即按当时的不放大处理。
+
+## Prompt 版本
+
+- v1：首版。
+- v2：门窗召回调优。逐房间沿墙枚举；写明铰链门、推拉门、窗、无门洞口的图例；凸窗 / 阳台玻璃每段直线单独报告；端点取墙洞两侧（不是门弧长度）；不确定时低置信度报告而不是省略。v1 在 case-b005（750 px 宽、带家具渲染）上只返回 4~5 个门窗（GT 19 个）。
 
 `<run-dir>` 必须在 Intake 目录内，已有 `report.json` 的目录不会被覆盖。
 
