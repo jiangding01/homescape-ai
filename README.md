@@ -45,7 +45,7 @@ packages/
 
 ## 本地启动
 
-需要 Node.js 22+ 与 pnpm 10+。
+需要 Node.js 22+ 与 pnpm 11.18.0（与 `package.json` 的 `packageManager` 一致；版本不一致时 pnpm 会自动下载切换，经内部镜像源可能因缺少签名而失败）。
 
 ~~~bash
 corepack enable
