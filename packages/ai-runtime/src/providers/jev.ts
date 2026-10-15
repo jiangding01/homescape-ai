@@ -215,7 +215,7 @@ export class JevProvider implements AIProvider {
             continue
           }
 
-          const responseText = (await response.text()).slice(0, 800)
+          const responseText = (await response.text()).slice(0, 200)
           throw new JevProviderError(
             'TypeSafe 请求失败（HTTP ' + response.status + '）：' + responseText,
             response.status,

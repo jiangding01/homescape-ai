@@ -31,6 +31,12 @@ h1 { margin: 24px 0 18px; font-size: clamp(44px, 7vw, 88px); line-height: 0.98; 
 .command-samples button { border: 1px solid #c1baae; padding: 6px 9px; background: #f4f0e7; color: #66675d; cursor: pointer; font-size: 11px; }
 .ai-feedback { display: grid; gap: 8px; margin-top: 14px; padding: 13px; border: 1px solid #c3bcae; background: rgba(248, 245, 238, 0.64); color: #616358; font-size: 12px; }
 .ai-feedback-error { border-color: #c7a99f; color: #914b3d; }
+.ai-proposal { border-color: #b59a5b; color: #4d4a3b; }
+.ai-proposal ul { margin: 0; padding-left: 18px; line-height: 1.7; }
+.ai-proposal-actions { display: flex; gap: 8px; }
+.ai-proposal-actions button { border: 0; padding: 7px 14px; background: #1f211b; color: #f5f2eb; cursor: pointer; }
+.ai-proposal-actions button.secondary { border: 1px solid #c1baae; background: #f4f0e7; color: #66675d; }
+.ai-proposal-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 .ai-feedback-head { display: flex; justify-content: space-between; gap: 12px; }
 .ai-feedback-head strong { color: #292b24; text-transform: uppercase; }
 .decision-chips { display: flex; flex-wrap: wrap; gap: 6px; }

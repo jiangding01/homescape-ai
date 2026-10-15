@@ -4,18 +4,71 @@ import type {
 } from '@homescape/design-intelligence'
 import type { FastifyInstance } from 'fastify'
 
+const shortString = { type: 'string', maxLength: 100 } as const
+
+export const MAX_COMMAND_LENGTH = 500
+export const MAX_CONTEXT_OBJECTS = 100
+
+const interpretBodySchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['requestId', 'command', 'context'],
+  properties: {
+    requestId: { type: 'string', minLength: 1, maxLength: 100 },
+    command: { type: 'string', minLength: 1, maxLength: MAX_COMMAND_LENGTH },
+    context: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['projectId', 'activeRoom', 'objects'],
+      properties: {
+        projectId: shortString,
+        activeRoom: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'name'],
+          properties: { id: shortString, name: shortString },
+        },
+        objects: {
+          type: 'array',
+          maxItems: MAX_CONTEXT_OBJECTS,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['id', 'category', 'label', 'locked'],
+            properties: {
+              id: shortString,
+              category: shortString,
+              label: shortString,
+              locked: { type: 'boolean' },
+              roomId: shortString,
+              zoneId: shortString,
+              width: { type: 'number', minimum: 0, maximum: 100000 },
+              colorFamily: shortString,
+            },
+          },
+        },
+      },
+    },
+  },
+} as const
+
 export function registerDesignInterpretRoute(
   server: FastifyInstance,
   interpreter: DesignCommandInterpreter | undefined,
+  rateLimit: { max: number; timeWindow: string | number },
 ) {
   server.post<{ Body: DesignCommandRequest }>(
     '/api/design/interpret',
+    {
+      schema: { body: interpretBodySchema },
+      config: { rateLimit },
+    },
     async (request, reply) => {
       if (!interpreter) {
         return reply.code(503).send({
           error: {
             code: 'AI_NOT_CONFIGURED',
-            message: '服务端尚未配置 TYPESAFE_API_KEY，自然语言设计决策暂不可用。',
+            message: '自然语言设计服务暂未启用，请联系管理员。',
           },
         })
       }

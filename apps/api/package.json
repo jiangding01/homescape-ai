@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fastify/rate-limit": "^11.2.1",
     "@homescape/ai-runtime": "workspace:*",
     "@homescape/design-intelligence": "workspace:*",
     "@homescape/domain": "workspace:*",
