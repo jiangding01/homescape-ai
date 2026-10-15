@@ -10,7 +10,7 @@ HomeScape AI 从真实住宅空间出发，把自然语言转换为受限、可�
 Real Floor Plan
 → Candidate + Human Review
 → Final HomeSpatialModel
-→ Active Workspace
+→ 服务端项目 / 时间线
 → Natural Language
 → AI Capability Runtime
 → DesignOperation[]
@@ -32,6 +32,7 @@ apps/
 
 packages/
 ├── spatial-model           # 住宅空间真值
+├── contracts               # 前后端共用 API 契约（zod）
 ├── domain                  # DesignState / Operation / Revision
 ├── catalog                 # SKU / dimensions / placement rules
 ├── asset-pipeline          # Production Asset Ingestion / Geometry QA
@@ -45,7 +46,7 @@ packages/
 
 ## 本地启动
 
-需要 Node.js 22+ 与 pnpm 11.18.0（与 `package.json` 的 `packageManager` 一致；版本不一致时 pnpm 会自动下载切换，经内部镜像源可能因缺少签名而失败）。
+需要 Node.js 22.13+（API 使用内置 `node:sqlite`）与 pnpm 11.18.0（与 `package.json` 的 `packageManager` 一致；版本不一致时 pnpm 会自动下载切换，经内部镜像源可能因缺少签名而失败）。
 
 ~~~bash
 corepack enable
@@ -56,6 +57,8 @@ pnpm dev
 
 Web: http://localhost:5173  
 API: http://localhost:3001
+
+API 默认只监听 127.0.0.1，可用 `HOST` 覆盖；写接口尚无鉴权，不得公开部署。设计状态持久化到 SQLite，默认 `apps/api/.data/homescape.sqlite`，可用 `HOMESCAPE_DB_PATH` 覆盖（该目录已被忽略，不入库）。
 
 ### 自然语言设计
 
@@ -70,6 +73,20 @@ TYPESAFE_MODEL=jev-latest
 
 如果没有配置 Key，空间、Catalog、Planner、Revision 与 3D 仍可运行，但 /api/design/interpret 会返回 AI_NOT_CONFIGURED。
 
+### 服务端接口
+
+设计状态由服务端持有，前端通过 `/api/v1` 读写，契约见 `packages/contracts`，设计见 [ADR-0019](docs/adr/0019-server-side-design-state.md)。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET / POST | `/projects` | 列出 / 创建项目 |
+| GET | `/projects/:id` | 项目当前状态 |
+| POST | `/projects/:id/spatial-models` | 追加不可变的空间模型版本 |
+| POST | `/projects/:id/revisions` | 提交操作，服务端运行 Planner；基线冲突 409，约束违规 422 |
+| POST | `/projects/:id/undo`、`/redo` | 补偿式撤销 / 重做 |
+
+自然语言解释仍走 `/api/design/interpret`。
+
 ## 核心原则
 
 1. HomeSpatialModel 是住宅空间真值，DesignState 是设计真值，Render Scene 只是 View。
@@ -81,15 +98,11 @@ TYPESAFE_MODEL=jev-latest
 
 ## 当前阶段
 
-已完成 Foundation、HomeSpatialModel、参数化 3D、Design State / Revision、Catalog / Planner、自然语言 Decision Runtime、Real Floor Plan + Active Workspace、glTF / GLB Runtime、Production Asset Ingestion，以及 Floor Plan Extractor Benchmark 基础设施。
+- 已完成：空间真值与几何内核（[ADR-0018](docs/adr/0018-geometry-kernel.md)）、参数化 3D、Design State / Revision、Catalog / Planner、自然语言 Decision Runtime、glTF / GLB Runtime、资产入库，以及设计状态服务端化（[ADR-0019](docs/adr/0019-server-side-design-state.md)）。
+- 户型识别：主路径为视觉大模型预填 + 人工确认（[ADR-0017](docs/adr/0017-floorplan-extraction-strategy.md)）；经典 Raster Extractor 仅作 Baseline。真实 Corpus 样本量仍小，Synthetic 指标不代表真实质量。
+- 工程主线下一步：对话式设计 Agent，然后布局规划器 v2。
 
-户型识别现在有独立 FloorPlanExtractor Contract 与离线 Benchmark Gate，可以用统一指标比较公司结构化数据、CV、VLM 或 Hybrid 输出，而不把业务绑定到某个 Provider。
-
-仓库自带的 SVG 仍只用于验证 Benchmark Harness。PR #12 新增 metric-structured-v0.1 结构化数据 Baseline；PR #13 加入 Ground Truth Annotation；PR #14 固定 Pilot Evaluation；PR #15 增加 Geometry Observation Contract 与确定性正交几何重建 Baseline。
-
-PR #15 固定“Detector Observation → FloorPlanDraft”的确定性重建；PR #16 已增加第一个 PNG / JPEG Raster Geometry Baseline，把真实像素解码到 Geometry Observation。
-
-PR #16 仍是 classical deterministic baseline，不代表真实 Corpus 上已经达标。真正模型选型仍需真实 Corpus。建议先用 10 张去敏真实户型图做标注 Pilot，稳定后扩充到 30~50 张；素材继续保存在被 Git 忽略的 .floorplan-corpus 中。
+详见 [路线图](docs/ROADMAP.md) 与 [工程交接](docs/HANDOFF.md)。
 
 目标闭环：
 
@@ -167,9 +180,13 @@ Production Policy 示例见 tools/fixtures/asset-ingestion/production-policy.exa
 
 ## 文档
 
+- [工程交接与决策记录](docs/HANDOFF.md)
 - [架构设计](docs/ARCHITECTURE.md)
 - [资产流水线](docs/ASSET_PIPELINE.md)
 - [户型 Extractor Benchmark](docs/FLOORPLAN_EXTRACTOR_BENCHMARK.md)
+- [视觉大模型 Extractor](docs/FLOORPLAN_VISION_EXTRACTOR.md)
+- [真实户型 Intake](docs/FLOORPLAN_REAL_INTAKE.md)
+- [真实 GT Staging](docs/FLOORPLAN_REAL_GT_STAGING.md)
 - [真实户型 Corpus](docs/FLOORPLAN_CORPUS.md)
 - [Ground Truth 标注](docs/FLOORPLAN_ANNOTATION.md)
 - [Pilot Evaluation](docs/FLOORPLAN_PILOT.md)

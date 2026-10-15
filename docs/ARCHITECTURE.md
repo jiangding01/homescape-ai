@@ -1,4 +1,4 @@
-# HomeScape AI Architecture v0.16
+# HomeScape AI Architecture v0.19
 
 ## 1. 当前端到端闭环
 
@@ -6,22 +6,26 @@
 Real Floor Plan / PDF / Company Data
         ↓
 Floor Plan Extractor Layer
+        ├── 视觉大模型 Extractor（主路径，ADR-0017）
         ├── Metric Structured Baseline
-        ├── Geometry Detector → Orthogonal Reconstructor
-        ├── future VLM
+        ├── Geometry Detector → Orthogonal Reconstructor（Baseline）
         └── future Hybrid
         ↓
 FloorPlanDraft
         ↓
-Benchmark / Confidence
+Benchmark / Confidence + 人工确认
         ↓
-Importer + Human Review
+Importer（inferWallsFromRooms 成对边推导墙体）
         ↓
 HomeSpatialModel
         ↓
-Active Workspace
+服务端项目 / 时间线（SQLite）
         ↓
-Design / Planner / Revision / Babylon Runtime
+Planner / Revision（服务端）
+        ↓
+前端 Store（Zustand）
+        ↓
+Babylon Runtime
 ~~~
 
 PR #12 的重点是把“真实数据进入评测系统”与“第一个实际 Extractor Adapter”补齐，但不伪造公司原始 Schema，也不在没有真实 Corpus 的情况下宣布模型选型结果。
@@ -698,3 +702,26 @@ PR #16 仍不是生产级 CV：
 - 尚未跑真实 10 Case。
 
 是否加入 morphology、Hough、connected-component filter、OCR、VLM 或 learned detector，必须由真实 Pilot Failure Slice 决定。
+
+## 17. 几何内核（ADR-0018）
+
+要点：
+
+- 房间边界是墙体**内表面**，俯视逆时针；`Room.boundary` 是房间真值，墙体由 `inferWallsFromRooms` 推导，不再各存一份。
+- 成对边（间距 0.05–0.40 m）合成一面墙，间距即墙厚；T 型接头切分墙段；未配对边生成外墙。Wall 带 `sides` 与 `thicknessSource`，未经证据的墙厚保持“假设”。
+- 门窗绑定墙段；共享墙上的门推导房间连接，外墙门连到 `EXTERIOR_SPACE_ID`。
+- 旋转统一由 spatial-model 的 `rotateLocalToWorld` / `yawFromDirection` 提供；家具正面为局部 −Z，朝房间内法线。
+- 多边形布尔运算使用 polygon-clipping；导入器像素 y 直接映射 +z，schemaVersion 0.3.0。
+
+边界：内核只处理几何与拓扑，不含设计决策。详见 [ADR-0018](adr/0018-geometry-kernel.md)。
+
+## 18. 设计状态服务端化（ADR-0019）
+
+要点：
+
+- 设计状态由服务端持有。`@homescape/contracts`（zod 4）是前后端共用契约，只依赖 zod 与领域类型。
+- `node:sqlite` 持久化：`projects`、`spatial_models`（不可变版本）、`timelines`、`revisions`（只追加，带状态快照）。默认库 `apps/api/.data/homescape.sqlite`，`HOMESCAPE_DB_PATH` 可覆盖。
+- `/api/v1` 提供项目、空间模型、Revision、Undo / Redo；服务端运行 Planner。基线冲突返回 409，约束违规返回 422；修订、操作、对象 ID 为 UUID v7。
+- 前端 Zustand store 只缓存服务端状态，刷新或重启后保留。
+
+边界：写接口无鉴权，默认只监听 127.0.0.1（`HOST` 可覆盖），不得公开部署；Node 最低 22.13。AI 仍只产出候选操作，经 Planner / Revision 才落库。详见 [ADR-0019](adr/0019-server-side-design-state.md)。
