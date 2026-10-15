@@ -10,6 +10,7 @@
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
+    "test": "vitest run",
     "asset:ingest": "node tools/asset-ingest.mjs",
     "asset:check-demo": "node tools/asset-ingest.mjs tools/fixtures/asset-ingestion/demo-release.json --check",
     "format": "prettier --write .",
@@ -39,9 +40,10 @@
   "devDependencies": {
     "@homescape/floorplan-extractor": "workspace:*",
     "prettier": "^3.6.2",
+    "tsx": "^4.20.5",
     "turbo": "^2.5.6",
     "typescript": "^5.9.2",
-    "tsx": "^4.20.5"
+    "vitest": "^3.2.7"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

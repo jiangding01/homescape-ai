@@ -483,7 +483,8 @@ export class DesignCommandInterpreter {
         source: 'ai',
         scope: roomScope,
         targetId: request.context.activeRoom.id,
-        style: { style: decisions.style.value },
+        // Decision enum uses snake_case; Catalog style tags use kebab-case.
+        style: { style: decisions.style.value.replaceAll('_', '-') },
       })
     }
 
