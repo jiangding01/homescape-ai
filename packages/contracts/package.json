@@ -1,0 +1,20 @@
+{
+  "name": "@homescape/contracts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@homescape/domain": "workspace:*",
+    "@homescape/spatial-model": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

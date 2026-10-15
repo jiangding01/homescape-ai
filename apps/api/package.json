@@ -4,17 +4,22 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsup src/index.ts --format esm --sourcemap --clean",
-    "start": "node dist/index.js",
+    "dev": "tsx watch --no-warnings=ExperimentalWarning src/index.ts",
+    "build": "tsup",
+    "start": "node --no-warnings=ExperimentalWarning dist/index.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@fastify/rate-limit": "^11.2.1",
     "@homescape/ai-runtime": "workspace:*",
+    "@homescape/catalog": "workspace:*",
+    "@homescape/contracts": "workspace:*",
     "@homescape/design-intelligence": "workspace:*",
     "@homescape/domain": "workspace:*",
-    "fastify": "^5.6.1"
+    "@homescape/planner": "workspace:*",
+    "@homescape/spatial-model": "workspace:*",
+    "fastify": "^5.6.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
