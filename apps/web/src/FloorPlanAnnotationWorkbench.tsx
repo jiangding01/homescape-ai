@@ -24,7 +24,7 @@ import {
   saveAnnotationDraft,
   type StoredAnnotationDraft,
 } from './floorplan-annotation-draft-store'
-import { clickNearStart, clampViewport, fullViewport, insertPolygonVertex, nearestEdgeProjection, nextEntityId, orthogonalEdge, orthogonalPoint, planOpeningFromClicks, projectPointToEdge, removePolygonVertex, screenToSource, viewportScreenScale, zoomViewport, type AnnotationViewport } from './floorplan-annotation-geometry'
+import { clickNearStart, clampViewport, createVerticalCalibration, fullViewport, moveCalibrationEndpoint, removeVerticalCalibration, setCalibrationDistance, type CalibrationAxisKey, insertPolygonVertex, nearestEdgeProjection, nextEntityId, orthogonalEdge, orthogonalPoint, planOpeningFromClicks, projectPointToEdge, removePolygonVertex, screenToSource, viewportScreenScale, zoomViewport, type AnnotationViewport } from './floorplan-annotation-geometry'
 import { lockAnnotationBackgroundScroll } from './floorplan-annotation-scroll-lock'
 
 const roomTypeOptions: Array<{ value: RoomType; label: string }> = [
@@ -48,6 +48,7 @@ type DragTarget =
     }
   | {
       type: 'calibration'
+      axis: CalibrationAxisKey
       endpoint: 'start' | 'end'
     }
 
@@ -215,9 +216,19 @@ function polygonHasSelfIntersection(points: readonly PixelPoint[]) {
 
 function getDraftIssues(draft: FloorPlanDraft) {
   const issues: string[] = []
+  const rawDraft: FloorPlanDraft = draft
 
   if (!isFloorPlanDraft(draft)) {
     issues.push('Draft 未通过 FloorPlanDraft v0.1 Contract')
+    // 标尺方向不合法同样会导致 Contract 失败，单独给出可操作的原因。
+    if (rawDraft.calibrationY) {
+      for (const axisError of [
+        getFloorPlanCalibrationAxisError(rawDraft.calibration, 'x'),
+        getFloorPlanCalibrationAxisError(rawDraft.calibrationY, 'y'),
+      ]) {
+        if (axisError) issues.push(axisError)
+      }
+    }
     return issues
   }
 
@@ -1037,15 +1048,18 @@ export function FloorPlanAnnotationWorkbench({
   }
 
   const startCalibrationDrag = (
+    axis: CalibrationAxisKey,
     endpoint: 'start' | 'end',
     event: ReactPointerEvent<SVGCircleElement>,
   ) => {
     if (disabled || drawingPoints !== null || openingMode || isPanning) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
-    setDragTarget({ type: 'calibration', endpoint })
+    const target = workingDraft[axis]
+    if (!target) return
+    setDragTarget({ type: 'calibration', axis, endpoint })
     editDragStart.current = {
-      point: workingDraft.calibration[endpoint === 'start' ? 'startPx' : 'endPx'],
+      point: target[endpoint === 'start' ? 'startPx' : 'endPx'],
       counted: false,
     }
   }
@@ -1093,14 +1107,9 @@ export function FloorPlanAnnotationWorkbench({
       return
     }
 
-    setWorkingDraft((current) => ({
-      ...current,
-      calibration: {
-        ...current.calibration,
-        [dragTarget.endpoint === 'start' ? 'startPx' : 'endPx']:
-          point,
-      },
-    }))
+    setWorkingDraft((current) =>
+      moveCalibrationEndpoint(current, dragTarget.axis, dragTarget.endpoint, point),
+    )
   }
 
   const stopDrag = () => {
@@ -1181,6 +1190,28 @@ export function FloorPlanAnnotationWorkbench({
     setAnnotationError(null)
   }
 
+  const addVerticalScale = () => {
+    if (disabled || workingDraft.calibrationY) return
+    setGeometryReviewed(false)
+    setWorkingDraft((current) => ({
+      ...current,
+      calibrationY: createVerticalCalibration(
+        current.calibration,
+        current.source.widthPx,
+        current.source.heightPx,
+      ),
+    }))
+    recordEdit('calibrationEdits')
+    setAnnotationError('已添加纵向标尺（距离按横向比例推算，仅为假设）；请拖到图上已知竖直尺寸并填写实际距离')
+  }
+
+  const removeVerticalScale = () => {
+    if (disabled || !workingDraft.calibrationY) return
+    setGeometryReviewed(false)
+    setWorkingDraft((current) => removeVerticalCalibration(current) as FloorPlanDraft)
+    recordEdit('calibrationEdits')
+  }
+
   const startBlankAnnotation = () => {
     if (!sourceImage || disabled) return
     const caseId = blankCaseId.trim()
@@ -1198,6 +1229,7 @@ export function FloorPlanAnnotationWorkbench({
         startPx: [Math.min(10, widthPx / 4), Math.max(0, heightPx - 10)],
         endPx: [Math.min(widthPx, 110), Math.max(0, heightPx - 10)],
         realDistanceMeters: 0,
+        basis: 'assumed',
       },
       assumptions: {
         ...current.assumptions,
@@ -1809,45 +1841,61 @@ export function FloorPlanAnnotationWorkbench({
               )
             })() : null}
 
-            <line
-              className="floorplan-calibration-line"
-              x1={workingDraft.calibration.startPx[0]}
-              y1={workingDraft.calibration.startPx[1]}
-              x2={workingDraft.calibration.endPx[0]}
-              y2={workingDraft.calibration.endPx[1]}
-            />
-            <circle
-              className="floorplan-calibration-handle"
-              cx={workingDraft.calibration.startPx[0]}
-              cy={workingDraft.calibration.startPx[1]}
-              r={px(HANDLE_PX.calibration)}
-              pointerEvents="none"
-            />
-            <circle
-              className="floorplan-handle-hit"
-              cx={workingDraft.calibration.startPx[0]}
-              cy={workingDraft.calibration.startPx[1]}
-              r={px(HANDLE_PX.calibrationHit)}
-              onPointerDown={(event) =>
-                startCalibrationDrag('start', event)
-              }
-            />
-            <circle
-              className="floorplan-calibration-handle"
-              cx={workingDraft.calibration.endPx[0]}
-              cy={workingDraft.calibration.endPx[1]}
-              r={px(HANDLE_PX.calibration)}
-              pointerEvents="none"
-            />
-            <circle
-              className="floorplan-handle-hit"
-              cx={workingDraft.calibration.endPx[0]}
-              cy={workingDraft.calibration.endPx[1]}
-              r={px(HANDLE_PX.calibrationHit)}
-              onPointerDown={(event) =>
-                startCalibrationDrag('end', event)
-              }
-            />
+            {([
+              ['calibration', workingDraft.calibration, '横向'],
+              ['calibrationY', workingDraft.calibrationY, '纵向'],
+            ] as const).map(([axis, cal, axisLabel]) =>
+              cal ? (
+                <g
+                  key={axis}
+                  className={axis === 'calibrationY' ? 'floorplan-calibration is-vertical' : 'floorplan-calibration'}
+                  data-calibration-axis={axis}
+                >
+                  <line
+                    className="floorplan-calibration-line"
+                    x1={cal.startPx[0]}
+                    y1={cal.startPx[1]}
+                    x2={cal.endPx[0]}
+                    y2={cal.endPx[1]}
+                  />
+                  <text
+                    className="floorplan-calibration-label"
+                    x={(cal.startPx[0] + cal.endPx[0]) / 2}
+                    y={(cal.startPx[1] + cal.endPx[1]) / 2}
+                    dy={axis === 'calibrationY' ? 0 : px(-10)}
+                    dx={axis === 'calibrationY' ? px(10) : 0}
+                    textAnchor={axis === 'calibrationY' ? 'start' : 'middle'}
+                    style={{ fontSize: px(HANDLE_PX.labelFont), strokeWidth: px(HANDLE_PX.labelStroke) }}
+                  >
+                    {axisLabel} {cal.realDistanceMeters}m
+                  </text>
+                  {(['start', 'end'] as const).map((endpoint) => {
+                    const point = endpoint === 'start' ? cal.startPx : cal.endPx
+                    return (
+                      <g key={endpoint}>
+                        <circle
+                          className="floorplan-calibration-handle"
+                          cx={point[0]}
+                          cy={point[1]}
+                          r={px(HANDLE_PX.calibration)}
+                          pointerEvents="none"
+                        />
+                        <circle
+                          className="floorplan-handle-hit"
+                          data-handle={`${axis}-${endpoint}`}
+                          cx={point[0]}
+                          cy={point[1]}
+                          r={px(HANDLE_PX.calibrationHit)}
+                          onPointerDown={(event) =>
+                            startCalibrationDrag(axis, endpoint, event)
+                          }
+                        />
+                      </g>
+                    )
+                  })}
+                </g>
+              ) : null,
+            )}
           </svg>
 
           {!aspectRatioCompatible ? (
@@ -2070,18 +2118,51 @@ export function FloorPlanAnnotationWorkbench({
                 onChange={(event) => {
                   const value = Number(event.target.value)
                   setGeometryReviewed(false)
-                  setWorkingDraft((current) => ({
-                    ...current,
-                    calibration: {
-                      ...current.calibration,
-                      realDistanceMeters: value,
-                    },
-                  }))
+                  setWorkingDraft((current) =>
+                    setCalibrationDistance(current, 'calibration', value),
+                  )
                 }}
                 onFocus={() => beginFieldEdit('calibration-distance', workingDraft.calibration.realDistanceMeters)}
                 onBlur={() => commitFieldEdit('calibration-distance', workingDraft.calibration.realDistanceMeters, 'calibrationEdits')}
               />
             </label>
+            <label>
+              Real Distance Y m（纵向）
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                data-testid="calibration-y-distance"
+                value={workingDraft.calibrationY?.realDistanceMeters ?? ''}
+                placeholder="未添加纵向标尺"
+                disabled={disabled || !workingDraft.calibrationY}
+                onChange={(event) => {
+                  const value = Number(event.target.value)
+                  setGeometryReviewed(false)
+                  setWorkingDraft((current) =>
+                    setCalibrationDistance(current, 'calibrationY', value),
+                  )
+                }}
+                onFocus={() => beginFieldEdit('calibration-y-distance', workingDraft.calibrationY?.realDistanceMeters ?? '')}
+                onBlur={() => commitFieldEdit('calibration-y-distance', workingDraft.calibrationY?.realDistanceMeters ?? '', 'calibrationEdits')}
+              />
+            </label>
+            <div className="floorplan-annotation-actions">
+              {workingDraft.calibrationY ? (
+                <button type="button" disabled={disabled} onClick={removeVerticalScale}>
+                  移除纵向标尺
+                </button>
+              ) : (
+                <button type="button" disabled={disabled} onClick={addVerticalScale}>
+                  添加纵向标尺
+                </button>
+              )}
+            </div>
+            <small>
+              基准：横向 {workingDraft.calibration.basis ?? '未声明'}
+              {workingDraft.calibrationY ? ' / 纵向 ' + (workingDraft.calibrationY.basis ?? '未声明') : ''}
+              。拖动端点或改距离后记为 annotated；assumed 会阻断 Finalize。
+            </small>
           </div>
 
           <div className="floorplan-annotation-group">

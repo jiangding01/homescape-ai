@@ -1,6 +1,11 @@
-import type { FloorPlanDraftOpening, PixelPoint } from '@homescape/spatial-model'
+import { getFloorPlanCalibrationAxisError, type FloorPlanCalibration, type FloorPlanDraftOpening, type PixelPoint } from '@homescape/spatial-model'
 import { describe, expect, it } from 'vitest'
 import {
+  createVerticalCalibration,
+  markCalibrationAnnotated,
+  moveCalibrationEndpoint,
+  removeVerticalCalibration,
+  setCalibrationDistance,
   fullViewport,
   nearestEdgeProjection,
   nextEntityId,
@@ -144,5 +149,62 @@ describe('nextEntityId', () => {
   it('fills the first gap', () => {
     expect(nextEntityId('manual-opening-', [])).toBe('manual-opening-1')
     expect(nextEntityId('manual-opening-', ['manual-opening-1', 'manual-opening-3'])).toBe('manual-opening-2')
+  })
+})
+
+describe('calibration helpers', () => {
+  const horizontal: FloorPlanCalibration = {
+    startPx: [100, 900],
+    endPx: [300, 900],
+    realDistanceMeters: 4,
+    basis: 'assumed',
+  }
+  const draft = { calibration: horizontal, other: 1 }
+
+  it('markCalibrationAnnotated 只改 basis', () => {
+    expect(markCalibrationAnnotated(horizontal)).toEqual({ ...horizontal, basis: 'annotated' })
+    expect(horizontal.basis).toBe('assumed')
+  })
+
+  it('createVerticalCalibration 按横向比例推算并保持 assumed', () => {
+    const vertical = createVerticalCalibration(horizontal, 1000, 800)
+    expect(vertical.basis).toBe('assumed')
+    expect(vertical.startPx[0]).toBe(vertical.endPx[0])
+    expect(vertical.endPx[1] - vertical.startPx[1]).toBe(400)
+    expect(vertical.realDistanceMeters).toBe(8) // 400px × 0.02 m/px
+    expect(getFloorPlanCalibrationAxisError(vertical, 'y')).toBeUndefined()
+  })
+
+  it('横向距离未知时纵向距离为 0，等待人工填写', () => {
+    const vertical = createVerticalCalibration({ ...horizontal, realDistanceMeters: 0 }, 1000, 800)
+    expect(vertical.realDistanceMeters).toBe(0)
+  })
+
+  it('moveCalibrationEndpoint 移动端点并置为 annotated', () => {
+    const next = moveCalibrationEndpoint(draft, 'calibration', 'end', [350, 905])
+    expect(next.calibration.endPx).toEqual([350, 905])
+    expect(next.calibration.startPx).toEqual([100, 900])
+    expect(next.calibration.basis).toBe('annotated')
+    expect(next.other).toBe(1)
+    expect(draft.calibration.endPx).toEqual([300, 900])
+  })
+
+  it('moveCalibrationEndpoint 对缺失的纵向标尺不做任何事', () => {
+    expect(moveCalibrationEndpoint(draft, 'calibrationY', 'start', [1, 1])).toBe(draft)
+  })
+
+  it('setCalibrationDistance 修改纵向距离并置为 annotated', () => {
+    const withY = { ...draft, calibrationY: createVerticalCalibration(horizontal, 1000, 800) }
+    const next = setCalibrationDistance(withY, 'calibrationY', 3.2)
+    expect(next.calibrationY?.realDistanceMeters).toBe(3.2)
+    expect(next.calibrationY?.basis).toBe('annotated')
+    expect(next.calibration).toBe(withY.calibration)
+  })
+
+  it('removeVerticalCalibration 去掉 calibrationY 字段', () => {
+    const withY = { ...draft, calibrationY: createVerticalCalibration(horizontal, 1000, 800) }
+    const next = removeVerticalCalibration(withY)
+    expect('calibrationY' in next).toBe(false)
+    expect(next.calibration).toBe(horizontal)
   })
 })

@@ -1,4 +1,4 @@
-import type { FloorPlanDraftOpening, FloorPlanDraftRoom, PixelPoint } from '@homescape/spatial-model'
+import type { FloorPlanCalibration, FloorPlanDraftOpening, FloorPlanDraftRoom, PixelPoint } from '@homescape/spatial-model'
 
 export interface AnnotationViewport {
   x: number
@@ -236,4 +236,75 @@ export function nextEntityId(prefix: string, usedIds: Iterable<string>): string 
   let sequence = 1
   while (used.has(prefix + sequence)) sequence += 1
   return prefix + sequence
+}
+
+/** 人工拖动端点或修改距离后，标定来源变为人工标注。 */
+export function markCalibrationAnnotated<T extends FloorPlanCalibration>(calibration: T): T {
+  return { ...calibration, basis: 'annotated' }
+}
+
+/**
+ * 新增纵向标尺的初始值：放在图像左侧、竖直居中，长度取图高一半。
+ * 距离按横向标尺的 px/m 推算（横向距离 ≤ 0 时记为 0 让标注者填写），
+ * 属于假设值，basis 固定为 `assumed`，直到人工拖动或修改距离。
+ */
+export function createVerticalCalibration(
+  horizontal: Pick<FloorPlanCalibration, 'startPx' | 'endPx' | 'realDistanceMeters'>,
+  widthPx: number,
+  heightPx: number,
+): FloorPlanCalibration {
+  const x = Math.min(Math.max(widthPx * 0.05, 0), widthPx)
+  const lengthPx = heightPx / 2
+  const horizontalPx = Math.hypot(
+    horizontal.endPx[0] - horizontal.startPx[0],
+    horizontal.endPx[1] - horizontal.startPx[1],
+  )
+  const metersPerPx = horizontalPx > 0 && horizontal.realDistanceMeters > 0
+    ? horizontal.realDistanceMeters / horizontalPx
+    : 0
+  return {
+    startPx: [x, heightPx * 0.25],
+    endPx: [x, heightPx * 0.75],
+    realDistanceMeters: Math.round(lengthPx * metersPerPx * 100) / 100,
+    basis: 'assumed',
+  }
+}
+
+export type CalibrationAxisKey = 'calibration' | 'calibrationY'
+
+/** 返回把指定轴标定端点移动到新位置后的 Draft 片段（basis 同步置为 annotated）。 */
+export function moveCalibrationEndpoint<T extends { calibration: FloorPlanCalibration; calibrationY?: FloorPlanCalibration }>(
+  draft: T,
+  axis: CalibrationAxisKey,
+  endpoint: 'start' | 'end',
+  point: PixelPoint,
+): T {
+  const target = draft[axis]
+  if (!target) return draft
+  return {
+    ...draft,
+    [axis]: markCalibrationAnnotated({
+      ...target,
+      [endpoint === 'start' ? 'startPx' : 'endPx']: point,
+    }),
+  }
+}
+
+/** 修改指定轴标定的真实距离（米）；同步置为 annotated。 */
+export function setCalibrationDistance<T extends { calibration: FloorPlanCalibration; calibrationY?: FloorPlanCalibration }>(
+  draft: T,
+  axis: CalibrationAxisKey,
+  realDistanceMeters: number,
+): T {
+  const target = draft[axis]
+  if (!target) return draft
+  return { ...draft, [axis]: markCalibrationAnnotated({ ...target, realDistanceMeters }) }
+}
+
+/** 移除纵向标尺，恢复为单一等比标定。 */
+export function removeVerticalCalibration<T extends { calibrationY?: FloorPlanCalibration }>(
+  draft: T,
+): Omit<T, 'calibrationY'> {
+  const { calibrationY: _removed, ...rest } = draft
+  return rest
 }
