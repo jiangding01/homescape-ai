@@ -53,7 +53,8 @@ function projectPoint(
 export interface FloorPlanImportWorkbenchProps {
   activeSpatialModelId?: string
   disabled?: boolean
-  onFinalized?: (model: HomeSpatialModel) => void
+  /** 可返回 Promise：上传空间模型到服务端失败时抛出，错误文案显示在工作台内。 */
+  onFinalized?: (model: HomeSpatialModel) => void | Promise<void>
 }
 
 export function FloorPlanImportWorkbench({
@@ -227,12 +228,12 @@ export function FloorPlanImportWorkbench({
     )
   }
 
-  const finalize = () => {
+  const finalize = async () => {
     if (!session) return
 
     try {
       const model = finalizeSpatialReview(session)
-      onFinalized?.(model)
+      await onFinalized?.(model)
       setError(null)
     } catch (finalizeError) {
       setError(

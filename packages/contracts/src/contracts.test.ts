@@ -2,6 +2,10 @@ import { sampleApartment } from '@homescape/spatial-model'
 import { describe, expect, it } from 'vitest'
 import {
   CommitRevisionRequestSchema,
+  DesignCommandRequestSchema,
+  DesignInterpretationSchema,
+  MAX_COMMAND_LENGTH,
+  MAX_CONTEXT_OBJECTS,
   CreateProjectRequestSchema,
   MAX_OPERATIONS_PER_REVISION,
   TimelineChangeRequestSchema,
@@ -68,6 +72,71 @@ describe('契约 schema', () => {
     expect(TimelineChangeRequestSchema.safeParse({}).success).toBe(false)
     expect(TimelineChangeRequestSchema.parse({ baseRevisionId: 'r1' })).toEqual({
       baseRevisionId: 'r1',
+    })
+  })
+
+  describe('interpret 接口', () => {
+    const validRequest = {
+      requestId: 'req-1',
+      command: '把沙发换成浅灰色',
+      context: {
+        projectId: 'p1',
+        activeRoom: { id: 'room-1', name: '客厅' },
+        objects: [{ id: 'o1', category: 'sofa', label: '沙发', locked: false, width: 2 }],
+      },
+    }
+    const parse = (value: unknown) => DesignCommandRequestSchema.safeParse(value).success
+
+    it('接受合法请求，拒绝超长 / 空白指令与多余字段', () => {
+      expect(parse(validRequest)).toBe(true)
+      expect(parse({ ...validRequest, command: '长'.repeat(MAX_COMMAND_LENGTH) })).toBe(true)
+      expect(parse({ ...validRequest, command: '长'.repeat(MAX_COMMAND_LENGTH + 1) })).toBe(false)
+      expect(parse({ ...validRequest, command: '   ' })).toBe(false)
+      expect(parse({ ...validRequest, requestId: '' })).toBe(false)
+      expect(parse({ ...validRequest, extra: 1 })).toBe(false)
+      expect(
+        parse({ ...validRequest, context: { ...validRequest.context, extra: 1 } }),
+      ).toBe(false)
+    })
+
+    it('限制上下文对象数量、字段长度与宽度范围', () => {
+      const object = { id: 'o', category: 'c', label: 'l', locked: false }
+      const withObjects = (objects: unknown[]) => ({
+        ...validRequest,
+        context: { ...validRequest.context, objects },
+      })
+
+      expect(parse(withObjects(Array.from({ length: MAX_CONTEXT_OBJECTS }, () => object)))).toBe(true)
+      expect(parse(withObjects(Array.from({ length: MAX_CONTEXT_OBJECTS + 1 }, () => object)))).toBe(false)
+      expect(parse(withObjects([{ ...object, label: '长'.repeat(101) }]))).toBe(false)
+      expect(parse(withObjects([{ ...object, width: -1 }]))).toBe(false)
+      expect(parse(withObjects([{ ...object, width: 100001 }]))).toBe(false)
+      expect(parse(withObjects([{ ...object, extra: 1 }]))).toBe(false)
+    })
+
+    it('响应 schema 校验结构并接受缺省 usage', () => {
+      const signal = { value: 'x', confidence: 0.9 }
+      const response = {
+        status: 'no_change',
+        message: 'ok',
+        operations: [],
+        decisions: {
+          intent: signal,
+          scope: signal,
+          target: signal,
+          category: signal,
+          size: signal,
+          color: signal,
+          seats: signal,
+          style: signal,
+          preserveOthers: 1,
+        },
+        meta: { provider: 'p', model: 'm', latencyMs: 12 },
+      }
+
+      expect(DesignInterpretationSchema.safeParse(response).success).toBe(true)
+      expect(DesignInterpretationSchema.safeParse({ ...response, status: 'bogus' }).success).toBe(false)
+      expect(DesignInterpretationSchema.safeParse({ status: 'ready' }).success).toBe(false)
     })
   })
 })

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@homescape/catalog": "workspace:*",
+    "@homescape/contracts": "workspace:*",
     "@homescape/domain": "workspace:*",
     "@homescape/floorplan-extractor": "workspace:*",
     "@homescape/planner": "workspace:*",
@@ -17,7 +18,8 @@
     "@homescape/renderer-contract": "workspace:*",
     "@homescape/spatial-model": "workspace:*",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@types/react": "^19.1.16",
