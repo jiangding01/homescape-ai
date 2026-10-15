@@ -1,4 +1,4 @@
-import type { Floor, RoomConnection, RoomType, SpatialId } from './model'
+import { EXTERIOR_SPACE_ID, type Floor, type RoomConnection, type RoomType, type SpatialId } from './model'
 
 export interface RoomGraphNode {
   roomId: SpatialId
@@ -17,6 +17,7 @@ export interface RoomGraphEdge {
 export interface RoomGraph {
   nodes: RoomGraphNode[]
   edges: RoomGraphEdge[]
+  /** 房间之间的邻接；连接到室外（EXTERIOR_SPACE_ID）的边只出现在 edges 中 */
   neighbors: ReadonlyMap<SpatialId, readonly SpatialId[]>
 }
 
@@ -28,8 +29,10 @@ export function buildRoomGraph(floor: Floor): RoomGraph {
   }
 
   const edges: RoomGraphEdge[] = floor.connections.map((connection) => {
-    neighborSets.get(connection.fromRoomId)?.add(connection.toRoomId)
-    neighborSets.get(connection.toRoomId)?.add(connection.fromRoomId)
+    if (connection.toRoomId !== EXTERIOR_SPACE_ID) {
+      neighborSets.get(connection.fromRoomId)?.add(connection.toRoomId)
+      neighborSets.get(connection.toRoomId)?.add(connection.fromRoomId)
+    }
 
     const edge: RoomGraphEdge = {
       connectionId: connection.id,

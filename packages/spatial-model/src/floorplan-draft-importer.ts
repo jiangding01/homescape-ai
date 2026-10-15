@@ -1,4 +1,4 @@
-import { distance2D, polygonArea, type Vec2 } from './geometry'
+import { distance2D, polygonArea, type Polygon2D, type Vec2 } from './geometry'
 import {
   getFloorPlanCalibrationAxisError,
   type FloorPlanCalibration,
@@ -8,15 +8,18 @@ import {
   type FloorPlanDraftRoom,
   type PixelPoint,
 } from './floorplan-draft'
-import type {
-  Floor,
-  HomeSpatialModel,
-  Opening,
-  Room,
-  RoomConnection,
-  RoomType,
-  SpatialId,
-  Wall,
+import {
+  EXTERIOR_SPACE_ID,
+  HOME_SPATIAL_MODEL_SCHEMA_VERSION,
+  type Floor,
+  type HomeSpatialModel,
+  type Opening,
+  type Room,
+  type RoomConnection,
+  type RoomType,
+  type SpatialId,
+  type Wall,
+  type WallRoomSide,
 } from './model'
 import type {
   SpatialImportContext,
@@ -24,18 +27,18 @@ import type {
   SpatialImportResult,
   SpatialUnresolvedIssue,
 } from './importer'
+import { ensureCounterClockwise, reversedEdgeIndex } from './polygon-ops'
 import { validateHomeSpatialModel } from './validation'
+import {
+  bindRoomEdgeSpanToWall,
+  inferWallsFromRooms,
+  isExteriorWall,
+  wallRoomSides,
+  type WallInferenceOptions,
+} from './wall-inference'
 
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.75
-const QUANTIZATION = 1000
-
-interface EdgeBinding {
-  wallId: SpatialId
-  reversed: boolean
-  lengthMeters: number
-  /** 沿该边方向每像素对应的米数（非等比缩放时随边方向变化） */
-  metersPerPixel: number
-}
+const SPAN_TOLERANCE_METERS = 0.001
 
 export interface FloorPlanDraftScale {
   /** 横向每米像素数（sx） */
@@ -44,13 +47,21 @@ export interface FloorPlanDraftScale {
   pixelsPerMeterY: number
 }
 
-interface WallBuilder {
-  wall: Wall
-  roomIds: Set<SpatialId>
+/** 导入后的房间几何：统一为从 +Y 俯视逆时针，并记录与 Draft 边索引的对应关系 */
+interface ImportedRoomGeometry {
+  draft: FloorPlanDraftRoom
+  boundary: Polygon2D
+  /** true 表示 Draft 原绕向为顺时针，已反转；Draft 第 i 条边对应模型第 n−1−i 条边且方向相反 */
+  reversed: boolean
 }
 
 export interface FloorPlanDraftImporterOptions {
   confidenceThreshold?: number
+  /**
+   * 成对边推导墙体的参数。外墙假设厚度固定取 Draft 的 assumptions.wallThicknessMeters，
+   * 墙段 ID 前缀固定为 `<projectId>-wall`。
+   */
+  wallInference?: Omit<WallInferenceOptions, 'exteriorThickness' | 'idPrefix'>
 }
 
 function assertPositiveFinite(value: number, label: string) {
@@ -65,14 +76,8 @@ function assertNonNegativeFinite(value: number, label: string) {
   }
 }
 
-function assertConfidence(
-  value: number | undefined,
-  label: string,
-) {
-  if (
-    value !== undefined &&
-    (!Number.isFinite(value) || value < 0 || value > 1)
-  ) {
+function assertConfidence(value: number | undefined, label: string) {
+  if (value !== undefined && (!Number.isFinite(value) || value < 0 || value > 1)) {
     throw new Error(label + ' 必须位于 0 到 1 之间')
   }
 }
@@ -105,22 +110,9 @@ function calibrationPixelsPerMeter(
   widthPx: number,
   heightPx: number,
 ) {
-  assertPositiveFinite(
-    calibration.realDistanceMeters,
-    label + '.realDistanceMeters',
-  )
-  assertPixelPointWithinSource(
-    calibration.startPx,
-    widthPx,
-    heightPx,
-    label + '.startPx',
-  )
-  assertPixelPointWithinSource(
-    calibration.endPx,
-    widthPx,
-    heightPx,
-    label + '.endPx',
-  )
+  assertPositiveFinite(calibration.realDistanceMeters, label + '.realDistanceMeters')
+  assertPixelPointWithinSource(calibration.startPx, widthPx, heightPx, label + '.startPx')
+  assertPixelPointWithinSource(calibration.endPx, widthPx, heightPx, label + '.endPx')
 
   const distancePx = pixelDistance(calibration.startPx, calibration.endPx)
   assertPositiveFinite(distancePx, label + ' pixel distance')
@@ -147,11 +139,10 @@ export function resolveFloorPlanDraftScale(
     return { pixelsPerMeterX, pixelsPerMeterY: pixelsPerMeterX }
   }
 
-  const axisErrors: Array<[FloorPlanCalibration, FloorPlanCalibrationAxis]> =
-    [
-      [draft.calibration, 'x'],
-      [draft.calibrationY, 'y'],
-    ]
+  const axisErrors: Array<[FloorPlanCalibration, FloorPlanCalibrationAxis]> = [
+    [draft.calibration, 'x'],
+    [draft.calibrationY, 'y'],
+  ]
 
   for (const [calibration, axis] of axisErrors) {
     const error = getFloorPlanCalibrationAxisError(calibration, axis)
@@ -169,20 +160,6 @@ export function resolveFloorPlanDraftScale(
   }
 }
 
-function pixelKey(point: PixelPoint) {
-  return (
-    Math.round(point[0] * QUANTIZATION) +
-    ',' +
-    Math.round(point[1] * QUANTIZATION)
-  )
-}
-
-function edgeKey(a: PixelPoint, b: PixelPoint) {
-  const aKey = pixelKey(a)
-  const bKey = pixelKey(b)
-  return aKey < bKey ? aKey + '|' + bKey : bKey + '|' + aKey
-}
-
 function confidenceIssue(
   id: string,
   entityIds: SpatialId[],
@@ -196,11 +173,7 @@ function confidenceIssue(
     id,
     kind: 'low_confidence',
     message:
-      label +
-      '置信度为 ' +
-      confidence.toFixed(2) +
-      '，低于自动确认阈值 ' +
-      threshold.toFixed(2),
+      label + '置信度为 ' + confidence.toFixed(2) + '，低于自动确认阈值 ' + threshold.toFixed(2),
     entityIds,
     confidence,
     requiresHumanReview: true,
@@ -217,20 +190,30 @@ function averageConfidence(values: Array<number | undefined>) {
   return known.reduce((sum, value) => sum + value, 0) / known.length
 }
 
+function minConfidence(values: Array<number | undefined>) {
+  const known = values.filter(
+    (value): value is number => value !== undefined && Number.isFinite(value),
+  )
+
+  return known.length > 0 ? Math.min(...known) : undefined
+}
+
 function roomType(room: FloorPlanDraftRoom): RoomType {
   return room.type ?? 'other'
 }
 
-export class FloorPlanDraftImporter
-  implements SpatialImporter<FloorPlanDraft>
-{
-  readonly id = 'floorplan-draft-v0.1'
+export class FloorPlanDraftImporter implements SpatialImporter<FloorPlanDraft> {
+  readonly id = 'floorplan-draft-v0.2'
 
   private readonly confidenceThreshold: number
+  private readonly wallInferenceOptions: Omit<
+    WallInferenceOptions,
+    'exteriorThickness' | 'idPrefix'
+  >
 
   constructor(options: FloorPlanDraftImporterOptions = {}) {
-    this.confidenceThreshold =
-      options.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD
+    this.confidenceThreshold = options.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD
+    this.wallInferenceOptions = options.wallInference ?? {}
   }
 
   supports(sourceKind: SpatialImportContext['sourceKind']) {
@@ -241,32 +224,17 @@ export class FloorPlanDraftImporter
     )
   }
 
-  async parse(
-    input: FloorPlanDraft,
-    context: SpatialImportContext,
-  ): Promise<SpatialImportResult> {
-    if (
-      !this.supports(input.source.kind) ||
-      context.sourceKind !== input.source.kind
-    ) {
-      throw new Error(
-        'FloorPlanDraft source.kind 与 Import Context 不匹配或不受支持',
-      )
+  async parse(input: FloorPlanDraft, context: SpatialImportContext): Promise<SpatialImportResult> {
+    if (!this.supports(input.source.kind) || context.sourceKind !== input.source.kind) {
+      throw new Error('FloorPlanDraft source.kind 与 Import Context 不匹配或不受支持')
     }
 
     assertPositiveFinite(input.source.widthPx, 'source.widthPx')
     assertPositiveFinite(input.source.heightPx, 'source.heightPx')
-    assertPositiveFinite(
-      input.assumptions.wallThicknessMeters,
-      'assumptions.wallThicknessMeters',
-    )
-    assertPositiveFinite(
-      input.assumptions.ceilingHeightMeters,
-      'assumptions.ceilingHeightMeters',
-    )
+    assertPositiveFinite(input.assumptions.wallThicknessMeters, 'assumptions.wallThicknessMeters')
+    assertPositiveFinite(input.assumptions.ceilingHeightMeters, 'assumptions.ceilingHeightMeters')
 
-    const { pixelsPerMeterX, pixelsPerMeterY } =
-      resolveFloorPlanDraftScale(input)
+    const { pixelsPerMeterX, pixelsPerMeterY } = resolveFloorPlanDraftScale(input)
 
     const draftIds = new Set<string>()
 
@@ -300,10 +268,7 @@ export class FloorPlanDraftImporter
     }
 
     for (const [openingIndex, opening] of input.openings.entries()) {
-      assertConfidence(
-        opening.confidence,
-        'openings[' + openingIndex + '].confidence',
-      )
+      assertConfidence(opening.confidence, 'openings[' + openingIndex + '].confidence')
     }
 
     const allPoints = input.rooms.flatMap((room) => room.boundaryPx)
@@ -327,10 +292,7 @@ export class FloorPlanDraftImporter
     }
 
     const unresolved: SpatialUnresolvedIssue[] = []
-    const wallBuilders = new Map<string, WallBuilder>()
-    const edgeBindings = new Map<string, EdgeBinding>()
-    const rooms: Room[] = []
-    let wallSequence = 1
+    const geometries = new Map<SpatialId, ImportedRoomGeometry>()
 
     for (const draftRoom of input.rooms) {
       if (draftRoom.boundaryPx.length < 3) {
@@ -343,106 +305,77 @@ export class FloorPlanDraftImporter
         })
       }
 
-      const boundary = {
-        points: draftRoom.boundaryPx.map(toWorld),
-      }
-      const wallIds: SpatialId[] = []
-
-      for (
-        let edgeIndex = 0;
-        edgeIndex < draftRoom.boundaryPx.length;
-        edgeIndex += 1
-      ) {
-        const startPx = draftRoom.boundaryPx[edgeIndex]
-        const endPx =
-          draftRoom.boundaryPx[
-            (edgeIndex + 1) % draftRoom.boundaryPx.length
-          ]
-
-        if (!startPx || !endPx) continue
+      for (let edgeIndex = 0; edgeIndex < draftRoom.boundaryPx.length; edgeIndex += 1) {
+        const startPx = draftRoom.boundaryPx[edgeIndex]!
+        const endPx = draftRoom.boundaryPx[(edgeIndex + 1) % draftRoom.boundaryPx.length]!
 
         if (pixelDistance(startPx, endPx) <= 0.001) {
-          throw new Error(
-            draftRoom.name +
-              ' 的边界包含零长度边，请先修正 FloorPlanDraft',
-          )
+          throw new Error(draftRoom.name + ' 的边界包含零长度边，请先修正 FloorPlanDraft')
         }
-
-        const start = toWorld(startPx)
-        const end = toWorld(endPx)
-        const key = edgeKey(startPx, endPx)
-        const existing = wallBuilders.get(key)
-
-        if (existing) {
-          existing.roomIds.add(draftRoom.id)
-          wallIds.push(existing.wall.id)
-
-          const reversed =
-            distance2D(existing.wall.start, end) <
-            distance2D(existing.wall.start, start)
-
-          edgeBindings.set(draftRoom.id + ':' + edgeIndex, {
-            wallId: existing.wall.id,
-            reversed,
-            lengthMeters: distance2D(start, end),
-            metersPerPixel:
-              distance2D(start, end) / pixelDistance(startPx, endPx),
-          })
-          continue
-        }
-
-        const wallId = context.projectId + '-wall-imported-' + wallSequence
-        wallSequence += 1
-        const wall: Wall = {
-          id: wallId,
-          start,
-          end,
-          thickness: input.assumptions.wallThicknessMeters,
-          height: input.assumptions.ceilingHeightMeters,
-          provenance: {
-            sourceKind: context.sourceKind,
-            ...(context.sourceId ? { sourceId: context.sourceId } : {}),
-            importerId: this.id,
-            ...(draftRoom.confidence !== undefined
-              ? { confidence: draftRoom.confidence }
-              : {}),
-          },
-        }
-
-        wallBuilders.set(key, {
-          wall,
-          roomIds: new Set([draftRoom.id]),
-        })
-        wallIds.push(wallId)
-        edgeBindings.set(draftRoom.id + ':' + edgeIndex, {
-          wallId,
-          reversed: false,
-          lengthMeters: distance2D(start, end),
-          metersPerPixel:
-            distance2D(start, end) / pixelDistance(startPx, endPx),
-        })
       }
 
-      const room: Room = {
+      // 房间边界即墙体内表面，不做偏移；只统一绕向。
+      const { polygon, reversed } = ensureCounterClockwise({
+        points: draftRoom.boundaryPx.map(toWorld),
+      })
+
+      geometries.set(draftRoom.id, { draft: draftRoom, boundary: polygon, reversed })
+    }
+
+    const inference = inferWallsFromRooms(
+      [...geometries.values()].map(({ draft, boundary }) => ({ id: draft.id, boundary })),
+      {
+        ...this.wallInferenceOptions,
+        exteriorThickness: input.assumptions.wallThicknessMeters,
+        idPrefix: context.projectId + '-wall',
+      },
+    )
+
+    const baseProvenance = {
+      sourceKind: context.sourceKind,
+      ...(context.sourceId ? { sourceId: context.sourceId } : {}),
+      importerId: this.id,
+    }
+
+    const walls: Wall[] = inference.walls.map((inferred) => {
+      const confidence = minConfidence(
+        inferred.sides
+          .filter((side): side is WallRoomSide => side.kind === 'room')
+          .map((side) => geometries.get(side.roomId)?.draft.confidence),
+      )
+
+      return {
+        id: inferred.id,
+        start: inferred.start,
+        end: inferred.end,
+        thickness: inferred.thickness,
+        height: input.assumptions.ceilingHeightMeters,
+        thicknessSource: inferred.thicknessSource,
+        sides: inferred.sides,
+        provenance: {
+          ...baseProvenance,
+          ...(confidence !== undefined ? { confidence } : {}),
+        },
+      }
+    })
+
+    const rooms: Room[] = []
+
+    for (const { draft: draftRoom, boundary } of geometries.values()) {
+      rooms.push({
         id: draftRoom.id,
         name: draftRoom.name,
         type: roomType(draftRoom),
         boundary,
         ceilingHeight: input.assumptions.ceilingHeightMeters,
-        wallIds,
+        wallIds: [...(inference.roomWallIds.get(draftRoom.id) ?? [])],
         openingIds: [],
         zones: [],
         provenance: {
-          sourceKind: context.sourceKind,
-          ...(context.sourceId ? { sourceId: context.sourceId } : {}),
-          importerId: this.id,
-          ...(draftRoom.confidence !== undefined
-            ? { confidence: draftRoom.confidence }
-            : {}),
+          ...baseProvenance,
+          ...(draftRoom.confidence !== undefined ? { confidence: draftRoom.confidence } : {}),
         },
-      }
-
-      rooms.push(room)
+      })
 
       if (!draftRoom.type) {
         unresolved.push({
@@ -450,9 +383,7 @@ export class FloorPlanDraftImporter
           kind: 'unknown_room_type',
           message: draftRoom.name + ' 的房间类型需要人工确认',
           entityIds: [draftRoom.id],
-          ...(draftRoom.confidence !== undefined
-            ? { confidence: draftRoom.confidence }
-            : {}),
+          ...(draftRoom.confidence !== undefined ? { confidence: draftRoom.confidence } : {}),
           requiresHumanReview: true,
         })
       }
@@ -478,15 +409,31 @@ export class FloorPlanDraftImporter
       }
     }
 
-    if (!input.assumptions.wallThicknessConfirmed) {
+    const assumedThicknessWalls = walls.filter((wall) => wall.thicknessSource !== 'paired')
+
+    if (!input.assumptions.wallThicknessConfirmed && assumedThicknessWalls.length > 0) {
       unresolved.push({
         id: 'issue-wall-thickness-assumption',
         kind: 'missing_dimension',
         message:
-          '墙厚当前使用 ' +
+          '外墙（及边界重合处）墙厚当前使用 ' +
           input.assumptions.wallThicknessMeters.toFixed(3) +
           'm 假设值，需要确认',
-        entityIds: [...wallBuilders.values()].map(({ wall }) => wall.id),
+        entityIds: assumedThicknessWalls.map((wall) => wall.id),
+        requiresHumanReview: true,
+      })
+    }
+
+    const coincidentWalls = walls.filter((wall) => wall.thicknessSource === 'coincident')
+
+    if (coincidentWalls.length > 0) {
+      unresolved.push({
+        id: 'issue-wall-coincident-boundaries',
+        kind: 'topology_conflict',
+        message:
+          coincidentWalls.length +
+          ' 段墙两侧的房间边界重合，疑似按墙中心线标注；房间边界应为墙体内表面，需要复核',
+        entityIds: coincidentWalls.map((wall) => wall.id),
         requiresHumanReview: true,
       })
     }
@@ -496,9 +443,7 @@ export class FloorPlanDraftImporter
         id: 'issue-ceiling-height-assumption',
         kind: 'missing_dimension',
         message:
-          '层高当前使用 ' +
-          input.assumptions.ceilingHeightMeters.toFixed(2) +
-          'm 假设值，需要确认',
+          '层高当前使用 ' + input.assumptions.ceilingHeightMeters.toFixed(2) + 'm 假设值，需要确认',
         entityIds: rooms.map((room) => room.id),
         requiresHumanReview: true,
       })
@@ -551,16 +496,16 @@ export class FloorPlanDraftImporter
 
     const openings: Opening[] = []
     const connections: RoomConnection[] = []
-    const wallBuilderById = new Map(
-      [...wallBuilders.values()].map((builder) => [builder.wall.id, builder]),
-    )
+    const wallById = new Map(walls.map((wall) => [wall.id, wall]))
+    const roomById = new Map(rooms.map((room) => [room.id, room]))
 
     for (const draftOpening of input.openings) {
       const imported = this.importOpening(
         draftOpening,
         context,
-        edgeBindings,
-        wallBuilderById,
+        geometries,
+        toWorld,
+        walls,
         unresolved,
       )
 
@@ -568,59 +513,41 @@ export class FloorPlanDraftImporter
 
       openings.push(imported)
 
-      for (const room of rooms) {
-        if (room.wallIds.includes(imported.wallId)) {
-          room.openingIds.push(imported.id)
-        }
+      const wall = wallById.get(imported.wallId)
+      const roomSides = wallRoomSides(wall)
+
+      for (const side of roomSides) {
+        roomById.get(side.roomId)?.openingIds.push(imported.id)
       }
 
-      const connectedRoomIds = wallBuilderById.get(imported.wallId)
-        ? [...wallBuilderById.get(imported.wallId)!.roomIds]
-        : []
+      if (imported.kind === 'window') continue
 
-      if (
-        (imported.kind === 'door' || imported.kind === 'opening') &&
-        connectedRoomIds.length === 2
-      ) {
-        const fromRoomId = connectedRoomIds[0]
-        const toRoomId = connectedRoomIds[1]
+      const otherRoom = roomSides.find((side) => side.roomId !== draftOpening.roomId)
+      const connectionProvenance = {
+        ...baseProvenance,
+        ...(imported.provenance?.confidence !== undefined
+          ? { confidence: imported.provenance.confidence }
+          : {}),
+      }
 
-        if (fromRoomId && toRoomId) {
-          connections.push({
-            id: context.projectId + '-connection-' + imported.id,
-            fromRoomId,
-            toRoomId,
-            kind: imported.kind === 'door' ? 'door' : 'opening',
-            openingId: imported.id,
-            provenance: {
-              sourceKind: context.sourceKind,
-              ...(context.sourceId ? { sourceId: context.sourceId } : {}),
-              importerId: this.id,
-              ...(imported.provenance?.confidence !== undefined
-                ? { confidence: imported.provenance.confidence }
-                : {}),
-            },
-          })
-        }
-      } else if (connectedRoomIds.length > 2) {
-        unresolved.push({
-          id: 'issue-opening-topology-' + imported.id,
-          kind: 'topology_conflict',
-          message: '开口 ' + imported.id + ' 所在墙体连接超过两个房间',
-          entityIds: [imported.id, ...connectedRoomIds],
-          requiresHumanReview: true,
+      if (otherRoom) {
+        connections.push({
+          id: context.projectId + '-connection-' + imported.id,
+          fromRoomId: draftOpening.roomId,
+          toRoomId: otherRoom.roomId,
+          kind: imported.kind === 'door' ? 'door' : 'opening',
+          openingId: imported.id,
+          provenance: connectionProvenance,
         })
-      }
-    }
-
-    for (const [key, builder] of wallBuilders) {
-      if (builder.roomIds.size > 2) {
-        unresolved.push({
-          id: 'issue-wall-topology-' + key.replace(/[^a-zA-Z0-9]+/g, '-'),
-          kind: 'topology_conflict',
-          message: '同一墙段被超过两个房间共享，需要人工检查拓扑',
-          entityIds: [builder.wall.id, ...builder.roomIds],
-          requiresHumanReview: true,
+      } else if (isExteriorWall(wall) && imported.kind === 'door') {
+        // 外墙上的门连接到室外（入户门、阳台门等）。外墙上的“开口”不推导连接。
+        connections.push({
+          id: context.projectId + '-connection-' + imported.id,
+          fromRoomId: draftOpening.roomId,
+          toRoomId: EXTERIOR_SPACE_ID,
+          kind: 'door',
+          openingId: imported.id,
+          provenance: connectionProvenance,
         })
       }
     }
@@ -639,35 +566,27 @@ export class FloorPlanDraftImporter
       name: '导入楼层',
       elevation: 0,
       rooms,
-      walls: [...wallBuilders.values()].map(({ wall }) => wall),
+      walls,
       openings,
       structuralElements: [],
       utilityAnchors: [],
       connections,
       provenance: {
-        sourceKind: context.sourceKind,
-        ...(context.sourceId ? { sourceId: context.sourceId } : {}),
-        importerId: this.id,
-        ...(overallConfidence !== undefined
-          ? { confidence: overallConfidence }
-          : {}),
+        ...baseProvenance,
+        ...(overallConfidence !== undefined ? { confidence: overallConfidence } : {}),
       },
     }
 
     const model: HomeSpatialModel = {
-      schemaVersion: '0.2.0',
+      schemaVersion: HOME_SPATIAL_MODEL_SCHEMA_VERSION,
       id: context.projectId + '-spatial',
       name: context.projectName,
       unit: 'meter',
       coordinateSystem: 'right-handed-y-up',
       floors: [floor],
       provenance: {
-        sourceKind: context.sourceKind,
-        ...(context.sourceId ? { sourceId: context.sourceId } : {}),
-        importerId: this.id,
-        ...(overallConfidence !== undefined
-          ? { confidence: overallConfidence }
-          : {}),
+        ...baseProvenance,
+        ...(overallConfidence !== undefined ? { confidence: overallConfidence } : {}),
       },
       metadata: {
         sourceLabel: context.sourceLabel ?? input.source.sourceLabel,
@@ -685,13 +604,18 @@ export class FloorPlanDraftImporter
   private importOpening(
     draft: FloorPlanDraftOpening,
     context: SpatialImportContext,
-    edgeBindings: Map<string, EdgeBinding>,
-    wallBuilderById: Map<SpatialId, WallBuilder>,
+    geometries: Map<SpatialId, ImportedRoomGeometry>,
+    toWorld: (point: PixelPoint) => Vec2,
+    walls: Wall[],
     unresolved: SpatialUnresolvedIssue[],
   ) {
-    const binding = edgeBindings.get(draft.roomId + ':' + draft.edgeIndex)
+    const confidenceField = draft.confidence !== undefined ? { confidence: draft.confidence } : {}
+    const geometry = geometries.get(draft.roomId)
+    const pointCount = geometry?.draft.boundaryPx.length ?? 0
+    const startPx = geometry?.draft.boundaryPx[draft.edgeIndex]
+    const endPx = geometry?.draft.boundaryPx[(draft.edgeIndex + 1) % Math.max(pointCount, 1)]
 
-    if (!binding) {
+    if (!geometry || !Number.isInteger(draft.edgeIndex) || !startPx || !endPx) {
       unresolved.push({
         id: 'issue-opening-edge-' + draft.id,
         kind: 'ambiguous_opening',
@@ -704,9 +628,7 @@ export class FloorPlanDraftImporter
           draft.edgeIndex +
           ' 条边',
         entityIds: [draft.id, draft.roomId],
-        ...(draft.confidence !== undefined
-          ? { confidence: draft.confidence }
-          : {}),
+        ...confidenceField,
         requiresHumanReview: true,
       })
       return undefined
@@ -716,48 +638,71 @@ export class FloorPlanDraftImporter
     assertPositiveFinite(draft.widthPx, 'opening.widthPx')
     assertPositiveFinite(draft.heightMeters, 'opening.heightMeters')
     if (draft.sillHeightMeters !== undefined) {
-      assertNonNegativeFinite(
-        draft.sillHeightMeters,
-        'opening.sillHeightMeters',
-      )
+      assertNonNegativeFinite(draft.sillHeightMeters, 'opening.sillHeightMeters')
     }
 
-    const width = draft.widthPx * binding.metersPerPixel
-    const sourceOffset = draft.offsetPx * binding.metersPerPixel
-    const offset = binding.reversed
-      ? binding.lengthMeters - sourceOffset - width
-      : sourceOffset
-    const wall = wallBuilderById.get(binding.wallId)?.wall
-    const sillHeight = draft.sillHeightMeters ?? 0
+    // 非等比缩放时，每像素对应的米数随边方向变化。
+    const edgeLengthMeters = distance2D(toWorld(startPx), toWorld(endPx))
+    const metersPerPixel = edgeLengthMeters / pixelDistance(startPx, endPx)
+    const width = draft.widthPx * metersPerPixel
+    const sourceOffset = draft.offsetPx * metersPerPixel
+    const edgeIndex = geometry.reversed
+      ? reversedEdgeIndex(pointCount, draft.edgeIndex)
+      : draft.edgeIndex
+    const spanStart = geometry.reversed ? edgeLengthMeters - sourceOffset - width : sourceOffset
+    const rangeIssue = (wallIds: SpatialId[]): SpatialUnresolvedIssue => ({
+      id: 'issue-opening-range-' + draft.id,
+      kind: 'ambiguous_opening',
+      message: '开口 ' + draft.id + ' 超出匹配墙体范围',
+      entityIds: [draft.id, ...wallIds],
+      ...confidenceField,
+      requiresHumanReview: true,
+    })
 
     if (
-      !wall ||
-      !Number.isFinite(offset) ||
-      offset < 0 ||
-      offset + width > binding.lengthMeters + 0.001
+      spanStart < -SPAN_TOLERANCE_METERS ||
+      spanStart + width > edgeLengthMeters + SPAN_TOLERANCE_METERS
     ) {
+      unresolved.push(rangeIssue([draft.roomId]))
+      return undefined
+    }
+
+    const binding = bindRoomEdgeSpanToWall(
+      walls,
+      { id: draft.roomId, boundary: geometry.boundary },
+      edgeIndex,
+      Math.max(spanStart, 0),
+      Math.min(spanStart + width, edgeLengthMeters),
+    )
+
+    if (binding.status === 'spans_multiple') {
       unresolved.push({
-        id: 'issue-opening-range-' + draft.id,
+        id: 'issue-opening-span-' + draft.id,
         kind: 'ambiguous_opening',
-        message: '开口 ' + draft.id + ' 超出匹配墙体范围',
-        entityIds: [draft.id, binding.wallId],
-        ...(draft.confidence !== undefined
-          ? { confidence: draft.confidence }
-          : {}),
+        message:
+          '开口 ' + draft.id + ' 跨越 ' + binding.wallIds.length + ' 个墙段，需要人工确认所属墙体',
+        entityIds: [draft.id, ...binding.wallIds],
+        ...confidenceField,
         requiresHumanReview: true,
       })
       return undefined
     }
+
+    if (binding.status === 'outside') {
+      unresolved.push(rangeIssue([draft.roomId]))
+      return undefined
+    }
+
+    const wall = walls.find((candidate) => candidate.id === binding.wallId)!
+    const sillHeight = draft.sillHeightMeters ?? 0
 
     if (sillHeight + draft.heightMeters > wall.height + 0.001) {
       unresolved.push({
         id: 'issue-opening-height-' + draft.id,
         kind: 'ambiguous_opening',
         message: '开口 ' + draft.id + ' 的垂直尺寸超过墙高，需要校正',
-        entityIds: [draft.id, binding.wallId],
-        ...(draft.confidence !== undefined
-          ? { confidence: draft.confidence }
-          : {}),
+        entityIds: [draft.id, wall.id],
+        ...confidenceField,
         requiresHumanReview: true,
       })
       return undefined
@@ -765,22 +710,18 @@ export class FloorPlanDraftImporter
 
     const opening: Opening = {
       id: draft.id,
-      wallId: binding.wallId,
+      wallId: wall.id,
       kind: draft.kind,
-      offset,
-      width,
+      offset: binding.offset,
+      width: binding.width,
       height: draft.heightMeters,
-      ...(draft.sillHeightMeters !== undefined
-        ? { sillHeight: draft.sillHeightMeters }
-        : {}),
+      ...(draft.sillHeightMeters !== undefined ? { sillHeight: draft.sillHeightMeters } : {}),
       ...(draft.swing ? { swing: draft.swing } : {}),
       provenance: {
         sourceKind: context.sourceKind,
         ...(context.sourceId ? { sourceId: context.sourceId } : {}),
         importerId: this.id,
-        ...(draft.confidence !== undefined
-          ? { confidence: draft.confidence }
-          : {}),
+        ...confidenceField,
       },
     }
 
