@@ -14,6 +14,7 @@ import type {
 } from '@homescape/domain'
 import {
   distance2D,
+  ensureCounterClockwise,
   polygonBounds,
   polygonCenter,
   type Floor,
@@ -22,9 +23,7 @@ import {
   type Room,
   type Vec2,
   type Vec3,
-  type Wall,
   type Zone,
-  yawFromDirection,
 } from '@homescape/spatial-model'
 import {
   expandFootprint,
@@ -32,6 +31,11 @@ import {
   footprintsOverlap,
   type Footprint2D,
 } from './geometry'
+import {
+  openingClearanceFootprints,
+  regionWallSpans,
+  wallPoses,
+} from './placement-geometry'
 import type {
   ConstraintViolation,
   PlannerDecision,
@@ -142,52 +146,6 @@ function objectFootprint(object: DesignObject): Footprint2D {
   }
 }
 
-function wallPoint(wall: Wall, distance: number): Vec2 {
-  const length = distance2D(wall.start, wall.end)
-
-  if (length === 0) return wall.start
-
-  const ratio = distance / length
-
-  return [
-    wall.start[0] + (wall.end[0] - wall.start[0]) * ratio,
-    wall.start[1] + (wall.end[1] - wall.start[1]) * ratio,
-  ]
-}
-
-function openingClearanceFootprints(region: PlacementRegion): Footprint2D[] {
-  const wallMap = new Map(region.floor.walls.map((wall) => [wall.id, wall]))
-  const openingMap = new Map(region.floor.openings.map((opening) => [opening.id, opening]))
-  const footprints: Footprint2D[] = []
-
-  for (const openingId of region.room.openingIds) {
-    const opening = openingMap.get(openingId)
-
-    if (!opening || (opening.kind !== 'door' && opening.kind !== 'opening')) continue
-
-    const wall = wallMap.get(opening.wallId)
-
-    if (!wall) continue
-
-    const length = distance2D(wall.start, wall.end)
-
-    if (length <= 0.001) continue
-
-    const center = wallPoint(wall, opening.offset + opening.width / 2)
-    const dx = wall.end[0] - wall.start[0]
-    const dz = wall.end[1] - wall.start[1]
-
-    footprints.push({
-      center,
-      width: opening.width + 0.3,
-      depth: 1,
-      yaw: yawFromDirection(dx, dz),
-    })
-  }
-
-  return footprints
-}
-
 function columnFootprints(region: PlacementRegion): Footprint2D[] {
   return region.floor.structuralElements
     .filter((element) => element.kind === 'column')
@@ -199,6 +157,11 @@ function columnFootprints(region: PlacementRegion): Footprint2D[] {
     }))
 }
 
+/** 区域边界统一为从 +Y 俯视逆时针，兼容旧数据的绕向。 */
+function ccw(polygon: Polygon2D) {
+  return ensureCounterClockwise(polygon).polygon
+}
+
 function regionForScope(
   spatialModel: HomeSpatialModel,
   state: DesignState,
@@ -207,7 +170,7 @@ function regionForScope(
   if (scope.type === 'room') {
     for (const floor of spatialModel.floors) {
       const room = floor.rooms.find((candidate) => candidate.id === scope.roomId)
-      if (room) return { floor, room, boundary: room.boundary }
+      if (room) return { floor, room, boundary: ccw(room.boundary) }
     }
 
     return undefined
@@ -217,7 +180,7 @@ function regionForScope(
     for (const floor of spatialModel.floors) {
       for (const room of floor.rooms) {
         const zone = room.zones.find((candidate) => candidate.id === scope.zoneId)
-        if (zone) return { floor, room, zone, boundary: zone.boundary }
+        if (zone) return { floor, room, zone, boundary: ccw(zone.boundary) }
       }
     }
 
@@ -235,10 +198,10 @@ function regionForScope(
 
       if (object.zoneId) {
         const zone = room.zones.find((candidate) => candidate.id === object.zoneId)
-        if (zone) return { floor, room, zone, boundary: zone.boundary }
+        if (zone) return { floor, room, zone, boundary: ccw(zone.boundary) }
       }
 
-      return { floor, room, boundary: room.boundary }
+      return { floor, room, boundary: ccw(room.boundary) }
     }
   }
 
@@ -279,73 +242,36 @@ function candidateIsValid(
     if (footprintsOverlap(padded, structure)) return false
   }
 
-  for (const opening of openingClearanceFootprints(region)) {
+  for (const opening of openingClearanceFootprints(region.floor, region.room)) {
     if (footprintsOverlap(padded, opening)) return false
   }
 
   return true
 }
 
+/**
+ * 靠墙候选：沿当前区域贴墙的每条边段（房间边界即墙体内表面）取若干位置，
+ * 边段短于家具宽度时跳过。家具正面（局部 −Z）朝向该边的房间内法线，
+ * 背面与内表面保持 wallClearance。
+ */
 function generateWallCandidates(
   asset: CatalogAsset,
   region: PlacementRegion,
   variant: CatalogVariant | undefined,
 ) {
-  const wallMap = new Map(region.floor.walls.map((wall) => [wall.id, wall]))
-  const candidates: PlacementCandidate[] = []
   const roomCenter = polygonCenter(region.boundary)
+  const spans = regionWallSpans(region.boundary, region.room.boundary)
 
-  for (const wallId of region.room.wallIds) {
-    const wall = wallMap.get(wallId)
-
-    if (!wall) continue
-
-    const length = distance2D(wall.start, wall.end)
-    const requiredLength = asset.dimensions.width + asset.placement.wallClearance * 2
-
-    if (length < requiredLength) continue
-
-    const dx = wall.end[0] - wall.start[0]
-    const dz = wall.end[1] - wall.start[1]
-    const unitX = dx / length
-    const unitZ = dz / length
-    const normals: readonly Vec2[] = [
-      [-unitZ, unitX],
-      [unitZ, -unitX],
-    ]
-    const fractions = [0.25, 0.5, 0.75] as const
-
-    for (const fraction of fractions) {
-      const centerOnWall: Vec2 = [
-        wall.start[0] + dx * fraction,
-        wall.start[1] + dz * fraction,
-      ]
-
-      for (const normal of normals) {
-        const inset =
-          asset.dimensions.depth / 2 + asset.placement.wallClearance
-        const center: Vec2 = [
-          centerOnWall[0] + normal[0] * inset,
-          centerOnWall[1] + normal[1] * inset,
-        ]
-        const score =
-          120 +
-          Math.min(length, 8) * 2 -
-          distance2D(center, roomCenter) * 1.5
-
-        candidates.push({
-          asset,
-          ...(variant ? { variant } : {}),
-          position: [center[0], region.floor.elevation, center[1]],
-          yaw: yawFromDirection(dx, dz),
-          anchor: 'wall',
-          score,
-        })
-      }
-    }
-  }
-
-  return candidates
+  return wallPoses(spans, asset.dimensions, asset.placement.wallClearance).map(
+    ({ center, yaw, span }): PlacementCandidate => ({
+      asset,
+      ...(variant ? { variant } : {}),
+      position: [center[0], region.floor.elevation, center[1]],
+      yaw,
+      anchor: 'wall',
+      score: 120 + Math.min(span.length, 8) * 2 - distance2D(center, roomCenter) * 1.5,
+    }),
+  )
 }
 
 function generateCenterCandidates(

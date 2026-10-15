@@ -30,8 +30,9 @@ const INTERIOR_WALL_THICKNESS = 0.12
  * 房间边界取内表面（ADR 0018）：中心线矩形向内收缩半个墙厚。
  *
  * `rect` 生成从 +Y 俯视逆时针的矩形：
- *   边 0 = 西侧（x = x0，+Z 方向），边 1 = 北侧（z = z1），
- *   边 2 = 东侧（x = x1），边 3 = 南侧（z = z0，−X 方向）。
+ *   边 0 = 左侧（x = x0，+Z 方向），边 1 = 下侧（z = z1），
+ *   边 2 = 右侧（x = x1），边 3 = 上侧（z = z0，−X 方向）。
+ * 上下左右均指从 +Y 俯视的屏幕方向（屏幕右为 +X、屏幕下为 +Z）。
  */
 function rect(x0: number, z0: number, x1: number, z1: number): Polygon2D {
   return {

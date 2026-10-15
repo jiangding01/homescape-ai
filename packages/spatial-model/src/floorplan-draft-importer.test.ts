@@ -158,15 +158,92 @@ describe('FloorPlanDraft 双轴标定导入', () => {
     const right = floor.openings.find(
       (opening) => opening.id === 'opening-right',
     )
-    // 偏移沿外墙中心线、从墙起点量起；外角封闭使外墙比房间边多伸出
-    // 半墙厚（中心线交点）+ 半墙厚（对方外表面）= 0.2 m。
-    const cornerExtension = 0.2
+    // 偏移沿外墙中心线、从墙起点量起；这里换算回世界坐标核对位置：
+    // 像素 y 直接映射为 +z（不翻转），房间左上角为原点。
+    const span = (opening: typeof top) => {
+      const wall = floor.walls.find((candidate) => candidate.id === opening!.wallId)!
+      const length = Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1])
+      const at = (distance: number) => [
+        wall.start[0] + ((wall.end[0] - wall.start[0]) / length) * distance,
+        wall.start[1] + ((wall.end[1] - wall.start[1]) / length) * distance,
+      ]
+      const a = at(opening!.offset)
+      const b = at(opening!.offset + opening!.width)
+      return {
+        x: [Math.min(a[0]!, b[0]!), Math.max(a[0]!, b[0]!)],
+        z: [Math.min(a[1]!, b[1]!), Math.max(a[1]!, b[1]!)],
+      }
+    }
     expect(top?.width).toBeCloseTo(1, 6)
-    expect(top?.offset).toBeCloseTo(1 + cornerExtension, 6)
     expect(right?.width).toBeCloseTo(1, 6)
-    expect(right?.offset).toBeCloseTo(0.5 + cornerExtension, 6)
+    // 顶边（图片上方，z = 0，外墙中心线外移 0.1 m）上 x ∈ [1, 2]
+    const topSpan = span(top)
+    expect(topSpan.x[0]).toBeCloseTo(1, 6)
+    expect(topSpan.x[1]).toBeCloseTo(2, 6)
+    expect(topSpan.z[0]).toBeCloseTo(-0.1, 6)
+    // 右边（x = 4，外移到 4.1）自上而下 0.5 m 起 → z ∈ [0.5, 1.5]
+    const rightSpan = span(right)
+    expect(rightSpan.x[0]).toBeCloseTo(4.1, 6)
+    expect(rightSpan.z[0]).toBeCloseTo(0.5, 6)
+    expect(rightSpan.z[1]).toBeCloseTo(1.5, 6)
     expect(result.validation.valid).toBe(true)
     expect(calibrationIssueIds(result)).toEqual([])
+  })
+})
+
+describe('像素到世界坐标的方向（不镜像）', () => {
+  it('图片左上方的房间在俯视（屏幕右 = +x、屏幕下 = +z）中仍在左上方', async () => {
+    // 左上：小房间；右下：大房间。按像素 y 直接映射 +z 时，俯视画面与原图一致。
+    const draft = rectangleDraft({
+      rooms: [
+        {
+          id: 'room-top-left',
+          name: '左上',
+          type: 'bedroom',
+          boundaryPx: [
+            [100, 100],
+            [220, 100],
+            [220, 240],
+            [100, 240],
+          ],
+        },
+        {
+          id: 'room-bottom-right',
+          name: '右下',
+          type: 'living',
+          boundaryPx: [
+            [400, 400],
+            [700, 400],
+            [700, 600],
+            [400, 600],
+          ],
+        },
+      ],
+      openings: [],
+    })
+    const result = await importDraft(draft)
+    const rooms = result.model.floors[0]!.rooms
+    const extent = (id: string) => {
+      const points = rooms.find((room) => room.id === id)!.boundary.points
+      return {
+        minX: Math.min(...points.map((point) => point[0])),
+        maxX: Math.max(...points.map((point) => point[0])),
+        minZ: Math.min(...points.map((point) => point[1])),
+        maxZ: Math.max(...points.map((point) => point[1])),
+      }
+    }
+    const topLeft = extent('room-top-left')
+    const bottomRight = extent('room-bottom-right')
+
+    // 原点取所有房间最小 x / 最小 z，即图片左上角方向
+    expect(topLeft.minX).toBeCloseTo(0, 9)
+    expect(topLeft.minZ).toBeCloseTo(0, 9)
+    expect(topLeft.maxX).toBeLessThan(bottomRight.minX)
+    expect(topLeft.maxZ).toBeLessThan(bottomRight.minZ)
+    // 像素差 (300, 300) 按单标定 60 px/m → (+5 m, +5 m)：y 不翻转
+    expect(bottomRight.minX - topLeft.minX).toBeCloseTo(300 / SX, 9)
+    expect(bottomRight.minZ - topLeft.minZ).toBeCloseTo(300 / SX, 9)
+    for (const room of rooms) expect(polygonWinding(room.boundary)).toBe('ccw')
   })
 })
 
@@ -338,7 +415,7 @@ describe('成对边推导墙体后的导入', () => {
         id: 'room-b',
         name: '卧室',
         type: 'bedroom',
-        // 按屏幕逆时针描点，导入时需反转并换算边索引
+        // 按屏幕逆时针描点：屏幕即俯视（像素 y → +z），无需反转
         boundaryPx: [
           [512, 100],
           [512, 400],
@@ -403,7 +480,8 @@ describe('成对边推导墙体后的导入', () => {
 
     const shared = floor.walls.filter((wall) => wall.thicknessSource === 'paired')
     expect(shared).toHaveLength(1)
-    expect(shared[0]!.id).toBe('test-wall-room-a-e1-s0')
+    // 房间 A 按屏幕顺时针描点，导入时反转：原第 1 条边变为第 2 条边
+    expect(shared[0]!.id).toBe('test-wall-room-a-e2-s0')
     expect(shared[0]!.thickness).toBeCloseTo(0.12, 9)
     expect(shared[0]!.start[0]).toBeCloseTo(4.06, 9)
 
@@ -432,17 +510,17 @@ describe('成对边推导墙体后的导入', () => {
     const door = openingWorldSpan(floor, 'door-a-b')
     expect(door.wall.thicknessSource).toBe('paired')
     expect(door.opening.width).toBeCloseTo(0.9, 9)
-    // Draft 边自 z=3 向 z=0，偏移 1 m → 门洞 z ∈ [1.1, 2]
-    expect(door.from[1]).toBeCloseTo(2, 9)
-    expect(door.to[1]).toBeCloseTo(1.1, 9)
+    // Draft 边 x = 500 自图片上方向下（z 增大），偏移 1 m → 门洞 z ∈ [1, 1.9]
+    expect(Math.min(door.from[1]!, door.to[1]!)).toBeCloseTo(1, 9)
+    expect(Math.max(door.from[1]!, door.to[1]!)).toBeCloseTo(1.9, 9)
 
-    // 原绕向相反的房间：边索引与偏移换算后指向同一物理位置（z ∈ [0.5, 1.5]）
+    // Draft 边 (800,400)→(800,100) 自下而上，偏移 0.5 m → z ∈ [1.5, 2.5]
     const window = openingWorldSpan(floor, 'window-b')
     expect(window.wall.thicknessSource).toBe('exterior')
     // 房间 B 外边 x = 7（坐标以最小 x 为原点），外墙中心线外移 0.1 m
     expect(window.from[0]).toBeCloseTo(7.1, 9)
-    expect(Math.min(window.from[1]!, window.to[1]!)).toBeCloseTo(0.5, 9)
-    expect(Math.max(window.from[1]!, window.to[1]!)).toBeCloseTo(1.5, 9)
+    expect(Math.min(window.from[1]!, window.to[1]!)).toBeCloseTo(1.5, 9)
+    expect(Math.max(window.from[1]!, window.to[1]!)).toBeCloseTo(2.5, 9)
 
     expect(floor.connections).toEqual([
       expect.objectContaining({
@@ -543,8 +621,58 @@ describe('成对边推导墙体后的导入', () => {
     expect(result.validation.issues).toEqual([])
   })
 
-  it('旧的中心线式 Draft（房间边界重合）生成需复核的重合墙，仍可推导连接', async () => {
+  it('演示草稿按内表面描点：相邻房间成对推导出 0.12 m 共享墙，不再产生重合墙复核问题', async () => {
     const result = await new FloorPlanDraftImporter().parse(sampleFloorPlanDraft, context)
+    const floor = result.model.floors[0]!
+
+    expect(floor.walls.some((wall) => wall.thicknessSource === 'coincident')).toBe(false)
+    const paired = floor.walls.filter((wall) => wall.thicknessSource === 'paired')
+    // 客餐厅–卧室、客餐厅–厨房、客餐厅–走廊、厨房–走廊、走廊–次卧、次卧–卧室
+    expect(paired).toHaveLength(6)
+    for (const wall of paired) expect(wall.thickness).toBeCloseTo(0.12, 9)
+    expect(result.unresolved.map((issue) => issue.id)).not.toContain(
+      'issue-wall-coincident-boundaries',
+    )
+    expect(floor.connections.map((connection) => connection.openingId).sort()).toEqual([
+      'import-door-bedroom2-hall',
+      'import-door-kitchen-hall',
+      'import-opening-living-hall',
+    ])
+    expect(result.validation.valid).toBe(true)
+  })
+
+  it('旧的中心线式 Draft（房间边界重合）生成需复核的重合墙，仍可推导连接', async () => {
+    // 演示草稿迁移前的写法：相邻房间共用同一条墙中心线
+    const rect = (x0: number, y0: number, x1: number, y1: number): Array<[number, number]> => [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+    ]
+    const legacy: FloorPlanDraft = {
+      ...sampleFloorPlanDraft,
+      rooms: sampleFloorPlanDraft.rooms.map((room) => ({
+        ...room,
+        boundaryPx: {
+          'import-room-living': [
+            [80, 420],
+            [420, 420],
+            [680, 420],
+            [680, 760],
+            [80, 760],
+          ] as Array<[number, number]>,
+          'import-room-bedroom': rect(680, 420, 1000, 760),
+          'import-room-kitchen': rect(80, 120, 420, 420),
+          'import-room-hall': rect(420, 120, 680, 420),
+          'import-room-bedroom-2': rect(680, 120, 1000, 420),
+        }[room.id]!,
+      })),
+      openings: sampleFloorPlanDraft.openings.map((opening) => ({
+        ...opening,
+        offsetPx: opening.offsetPx + (opening.id === 'import-opening-living-hall' ? 0 : 6),
+      })),
+    }
+    const result = await new FloorPlanDraftImporter().parse(legacy, context)
     const floor = result.model.floors[0]!
     const issue = result.unresolved.find(
       (candidate) => candidate.id === 'issue-wall-coincident-boundaries',

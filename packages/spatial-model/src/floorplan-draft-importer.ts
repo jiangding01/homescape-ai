@@ -277,9 +277,12 @@ export class FloorPlanDraftImporter implements SpatialImporter<FloorPlanDraft> {
       throw new Error('FloorPlanDraft 至少需要一个房间边界')
     }
 
+    // 从 +Y 俯视时屏幕右为 +X、屏幕下为 +Z（见 polygon-ops.ts 的绕向约定），
+    // 与图片像素坐标（x 向右、y 向下）同向，因此像素 y 直接映射为 +z，不做翻转；
+    // 翻转会让俯视结果相对原图上下镜像。
     const toRawWorld = (point: PixelPoint): Vec2 => [
       point[0] / pixelsPerMeterX,
-      (input.source.heightPx - point[1]) / pixelsPerMeterY,
+      point[1] / pixelsPerMeterY,
     ]
 
     const rawWorldPoints = allPoints.map(toRawWorld)

@@ -115,8 +115,12 @@ function selectPrimaryDesignRoom(
   )
 }
 
-function projectPoint(point: Vec2, minX: number, maxZ: number, scale: number) {
-  return [(point[0] - minX) * scale, (maxZ - point[1]) * scale] as const
+/**
+ * 平面视图按从 +Y 俯视绘制：屏幕右为 +X、屏幕下为 +Z（与 3D 俯视、导入原图方向一致），
+ * 因此 z 直接映射为屏幕 y，不做翻转。
+ */
+function projectPoint(point: Vec2, minX: number, minZ: number, scale: number) {
+  return [(point[0] - minX) * scale, (point[1] - minZ) * scale] as const
 }
 
 export function App() {
@@ -190,7 +194,11 @@ export function App() {
   }
 
   const graph = buildRoomGraph(floor)
-  const points = floor.rooms.flatMap((room) => room.boundary.points)
+  // 外墙中心线位于房间内表面之外，包围盒同时纳入墙体端点，避免被裁切。
+  const points = [
+    ...floor.rooms.flatMap((room) => room.boundary.points),
+    ...floor.walls.flatMap((wall) => [wall.start, wall.end]),
+  ]
   const xs = points.map((point) => point[0])
   const zs = points.map((point) => point[1])
   const minX = Math.min(...xs)
@@ -904,10 +912,10 @@ export function App() {
               >
                 {floor.rooms.map((room) => {
                   const center = polygonCenter(room.boundary)
-                  const [labelX, labelY] = projectPoint(center, minX, maxZ, scale)
+                  const [labelX, labelY] = projectPoint(center, minX, minZ, scale)
                   const polygonPoints = room.boundary.points
                     .map((point) =>
-                      projectPoint(point, minX, maxZ, scale).join(','),
+                      projectPoint(point, minX, minZ, scale).join(','),
                     )
                     .join(' ')
 
@@ -922,8 +930,8 @@ export function App() {
                 })}
 
                 {floor.walls.map((wall) => {
-                  const [x1, y1] = projectPoint(wall.start, minX, maxZ, scale)
-                  const [x2, y2] = projectPoint(wall.end, minX, maxZ, scale)
+                  const [x1, y1] = projectPoint(wall.start, minX, minZ, scale)
+                  const [x2, y2] = projectPoint(wall.end, minX, minZ, scale)
 
                   return (
                     <line
