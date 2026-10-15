@@ -137,6 +137,7 @@ export function App() {
   const [aiError, setAiError] = useState<string | null>(null)
   const [pendingProposal, setPendingProposal] =
     useState<PendingDestructiveProposal | null>(null)
+  const [revisionError, setRevisionError] = useState<string | null>(null)
   const [plannerFeedback, setPlannerFeedback] =
     useState<PlannerResult | null>(null)
   const revisionSequence = useRef(1)
@@ -232,8 +233,19 @@ export function App() {
     setAiFeedback(null)
     setAiError(null)
     setPendingProposal(null)
+    setRevisionError(null)
     setCommand('为' + nextRoom.name + '布置现代原木风的沙发、茶几和绿植')
     setView('3d')
+  }
+
+  // Undo / Redo 会追加补偿 Revision 并正常走锁检查，被拒绝时保留当前 timeline 并提示原因。
+  const changeTimeline = (change: typeof undoTimeline) => {
+    try {
+      setTimeline(change(timeline).timeline)
+      setRevisionError(null)
+    } catch (error) {
+      setRevisionError(error instanceof Error ? error.message : String(error))
+    }
   }
 
   const executePlan = async (
@@ -277,9 +289,12 @@ export function App() {
         operations,
         mutations: result.mutations,
         provenance: {
+          // 解锁只允许 actor=user，Revision 引擎会据此校验，因此 actor 必须如实反映来源。
           actor: operations.some((operation) => operation.source === 'ai')
             ? 'ai'
-            : 'system',
+            : operations.every((operation) => operation.source === 'user')
+              ? 'user'
+              : 'system',
           plannerVersion: 'rule-based-v0.1',
           schemaVersion: '0.1.0',
           ...(aiMeta
@@ -840,22 +855,24 @@ export function App() {
                 <button
                   type="button"
                   disabled={busy || timeline.past.length === 0}
-                  onClick={() =>
-                    setTimeline((current) => undoTimeline(current).timeline)
-                  }
+                  onClick={() => changeTimeline(undoTimeline)}
                 >
                   Undo
                 </button>
                 <button
                   type="button"
                   disabled={busy || timeline.future.length === 0}
-                  onClick={() =>
-                    setTimeline((current) => redoTimeline(current).timeline)
-                  }
+                  onClick={() => changeTimeline(redoTimeline)}
                 >
                   Redo
                 </button>
               </div>
+              {revisionError ? (
+                <div className="ai-feedback ai-feedback-error">
+                  <strong>Revision</strong>
+                  <span>{revisionError}</span>
+                </div>
+              ) : null}
             </div>
 
             {plannerFeedback ? (

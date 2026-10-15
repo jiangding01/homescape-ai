@@ -28,6 +28,7 @@ import {
   type Room,
   type Vec2,
   type Wall,
+  yawFromDirection,
 } from '@homescape/spatial-model'
 import { triangulateSimplePolygon } from './triangulate'
 
@@ -530,7 +531,7 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
         floor.elevation + element.bottomElevation + element.height / 2,
         (element.start[1] + element.end[1]) / 2,
       )
-      beam.rotation.y = -Math.atan2(dz, dx)
+      beam.rotation.y = yawFromDirection(dx, dz)
       beam.material = materials.structure
       beam.parent = root
     }
@@ -597,7 +598,7 @@ export class BabylonSceneRenderer implements SceneRendererAdapter {
         floorElevation + baseHeight + pieceHeight / 2,
         wall.start[1] + unitZ * centerOffset,
       )
-      piece.rotation.y = -Math.atan2(dz, dx)
+      piece.rotation.y = yawFromDirection(dx, dz)
       piece.material = material
       piece.parent = root
       piece.metadata = {

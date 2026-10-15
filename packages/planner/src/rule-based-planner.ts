@@ -24,6 +24,7 @@ import {
   type Vec3,
   type Wall,
   type Zone,
+  yawFromDirection,
 } from '@homescape/spatial-model'
 import {
   expandFootprint,
@@ -180,7 +181,7 @@ function openingClearanceFootprints(region: PlacementRegion): Footprint2D[] {
       center,
       width: opening.width + 0.3,
       depth: 1,
-      yaw: -Math.atan2(dz, dx),
+      yaw: yawFromDirection(dx, dz),
     })
   }
 
@@ -336,7 +337,7 @@ function generateWallCandidates(
           asset,
           ...(variant ? { variant } : {}),
           position: [center[0], region.floor.elevation, center[1]],
-          yaw: -Math.atan2(dz, dx),
+          yaw: yawFromDirection(dx, dz),
           anchor: 'wall',
           score,
         })
@@ -529,6 +530,19 @@ export class RuleBasedPlanner implements SpatialPlanner {
 
       if (operation.type === 'lock' || operation.type === 'unlock') {
         const locked = operation.type === 'lock'
+
+        // 锁代表用户的保护意图：AI / 规则 / 系统可以代用户加锁，但只有用户本人能解锁，
+        // 否则 [unlock X, move X] 这类 AI 输出即可绕过用户的锁。
+        if (!locked && operation.source !== 'user') {
+          violations.push({
+            code: 'planner.unlock_requires_user',
+            severity: 'error',
+            message: '只有用户本人可以解除锁定，已拒绝来源为 ' + operation.source + ' 的解锁：' + operation.targetId,
+            operationId: operation.id,
+            objectIds: [operation.targetId],
+          })
+          continue
+        }
 
         mutations.push({
           type: 'set_lock',
