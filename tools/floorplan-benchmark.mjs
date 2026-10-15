@@ -385,25 +385,53 @@ function validateDraft(value, label) {
     point[1] >= 0 &&
     point[1] <= source.heightPx
 
-  if (
-    !calibration ||
-    !isFinitePoint(calibration.startPx) ||
-    !isFinitePoint(calibration.endPx) ||
-    !Number.isFinite(calibration.realDistanceMeters) ||
-    calibration.realDistanceMeters <= 0 ||
-    (isFinitePoint(calibration.startPx) &&
-      isFinitePoint(calibration.endPx) &&
-      pixelDistance(
-        calibration.startPx,
-        calibration.endPx,
-      ) <= EPSILON)
-  ) {
-    failures.push(label + ': calibration 无效')
-  } else if (
-    !pointWithinSource(calibration.startPx) ||
-    !pointWithinSource(calibration.endPx)
-  ) {
-    failures.push(label + ': calibration point 超出 source bounds')
+  const calibrationBases = [
+    'assumed',
+    'annotated',
+    'extracted',
+    'structured',
+  ]
+  const validateCalibration = (value, field) => {
+    if (
+      !value ||
+      !isFinitePoint(value.startPx) ||
+      !isFinitePoint(value.endPx) ||
+      !Number.isFinite(value.realDistanceMeters) ||
+      value.realDistanceMeters <= 0 ||
+      (value.basis !== undefined &&
+        !calibrationBases.includes(value.basis)) ||
+      pixelDistance(value.startPx, value.endPx) <= EPSILON
+    ) {
+      failures.push(label + ': ' + field + ' 无效')
+      return false
+    }
+    if (
+      !pointWithinSource(value.startPx) ||
+      !pointWithinSource(value.endPx)
+    ) {
+      failures.push(label + ': ' + field + ' point 超出 source bounds')
+      return false
+    }
+    return true
+  }
+  const calibrationValid = validateCalibration(
+    calibration,
+    'calibration',
+  )
+
+  if (draft.calibrationY !== undefined) {
+    const calibrationY = asRecord(draft.calibrationY)
+    // 双轴标定时横向标定须 |dx| ≥ |dy|，纵向标定须 |dy| ≥ |dx|
+    if (
+      validateCalibration(calibrationY, 'calibrationY') &&
+      calibrationValid &&
+      (Math.abs(calibration.endPx[0] - calibration.startPx[0]) <
+        Math.abs(calibration.endPx[1] - calibration.startPx[1]) ||
+        Math.abs(calibrationY.endPx[1] - calibrationY.startPx[1]) <
+          Math.abs(calibrationY.endPx[0] - calibrationY.startPx[0]))
+    ) {
+      failures.push(label + ': calibration / calibrationY 未沿对应轴向')
+    }
   }
 
   if (
@@ -838,12 +866,26 @@ function matchOpenings(
   return matches
 }
 
-function calibrationPixelsPerMeter(draft) {
+// axis = 'x' 使用 calibration；axis = 'y' 使用 calibrationY，缺省时回退到 calibration（等比）
+function calibrationPixelsPerMeter(draft, axis = 'x') {
+  const calibration =
+    axis === 'y' && draft.calibrationY
+      ? draft.calibrationY
+      : draft.calibration
+
   return (
-    pixelDistance(
-      draft.calibration.startPx,
-      draft.calibration.endPx,
-    ) / draft.calibration.realDistanceMeters
+    pixelDistance(calibration.startPx, calibration.endPx) /
+    calibration.realDistanceMeters
+  )
+}
+
+function scaleErrorRatioForAxis(expected, candidate, axis) {
+  const expectedScale = calibrationPixelsPerMeter(expected, axis)
+  const candidateScale = calibrationPixelsPerMeter(candidate, axis)
+
+  return (
+    Math.abs(candidateScale - expectedScale) /
+    Math.max(expectedScale, EPSILON)
   )
 }
 
@@ -888,6 +930,8 @@ function evaluateCase(
         meanOpeningCenterErrorRatio: null,
         meanOpeningWidthErrorRatio: null,
         scaleErrorRatio: 1,
+        scaleErrorRatioX: 1,
+        scaleErrorRatioY: 1,
       },
       failures: validation.failures,
     }
@@ -947,11 +991,18 @@ function evaluateCase(
     expected.openings.length,
   )
 
-  const expectedScale = calibrationPixelsPerMeter(expected)
-  const candidateScale = calibrationPixelsPerMeter(candidate)
-  const scaleErrorRatio =
-    Math.abs(candidateScale - expectedScale) /
-    Math.max(expectedScale, EPSILON)
+  const scaleErrorRatioX = scaleErrorRatioForAxis(
+    expected,
+    candidate,
+    'x',
+  )
+  const scaleErrorRatioY = scaleErrorRatioForAxis(
+    expected,
+    candidate,
+    'y',
+  )
+  // 兼容字段：取两轴最大值，Pilot 与既有 Gate 继续使用
+  const scaleErrorRatio = Math.max(scaleErrorRatioX, scaleErrorRatioY)
 
   const metrics = {
     draftValid: true,
@@ -981,6 +1032,8 @@ function evaluateCase(
           )
         : null,
     scaleErrorRatio,
+    scaleErrorRatioX,
+    scaleErrorRatioY,
   }
 
   const failures = []
@@ -1077,6 +1130,12 @@ function aggregate(results) {
       meanScaleErrorRatio: mean(
         cases.map((item) => item.metrics.scaleErrorRatio),
       ),
+      meanScaleErrorRatioX: mean(
+        cases.map((item) => item.metrics.scaleErrorRatioX),
+      ),
+      meanScaleErrorRatioY: mean(
+        cases.map((item) => item.metrics.scaleErrorRatioY),
+      ),
     }))
     .sort((a, b) => a.extractorId.localeCompare(b.extractorId))
 }
@@ -1104,7 +1163,12 @@ function printHumanSummary(report) {
         'roomRecall=' + formatPercent(summary.meanRoomRecall),
         'openingRecall=' + formatPercent(summary.meanOpeningRecall),
         'scaleError=' +
-          formatPercent(summary.meanScaleErrorRatio),
+          formatPercent(summary.meanScaleErrorRatio) +
+          ' (x=' +
+          formatPercent(summary.meanScaleErrorRatioX) +
+          ', y=' +
+          formatPercent(summary.meanScaleErrorRatioY) +
+          ')',
       ].join('  ') + '\n',
     )
   }

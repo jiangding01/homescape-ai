@@ -867,6 +867,8 @@ export class OrthogonalGeometryReconstructor {
         endPx: observation.calibration.endPx,
         realDistanceMeters:
           observation.calibration.realDistanceMeters,
+        // Observation 未声明比例尺来源时保守视为假设值，导入时阻断 Finalize
+        basis: observation.calibration.basis ?? 'assumed',
       },
       assumptions: {
         wallThicknessMeters:

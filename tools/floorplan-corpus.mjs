@@ -284,19 +284,29 @@ function validateGroundTruth(value, expectedKind, caseId) {
     throw new Error(caseId + ' Ground Truth source 无效')
   }
 
-  const calibration = asRecord(draft.calibration)
+  const isValidCalibration = (calibration) =>
+    Boolean(calibration) &&
+    isFinitePoint(calibration.startPx) &&
+    isFinitePoint(calibration.endPx) &&
+    Number.isFinite(calibration.realDistanceMeters) &&
+    calibration.realDistanceMeters > 0 &&
+    (calibration.basis === undefined ||
+      ['assumed', 'annotated', 'extracted', 'structured'].includes(
+        calibration.basis,
+      )) &&
+    pointDistance(calibration.startPx, calibration.endPx) > 1e-9 &&
+    pointWithinSource(calibration.startPx, source) &&
+    pointWithinSource(calibration.endPx, source)
+
+  if (!isValidCalibration(asRecord(draft.calibration))) {
+    throw new Error(caseId + ' Ground Truth calibration 无效')
+  }
 
   if (
-    !calibration ||
-    !isFinitePoint(calibration.startPx) ||
-    !isFinitePoint(calibration.endPx) ||
-    !Number.isFinite(calibration.realDistanceMeters) ||
-    calibration.realDistanceMeters <= 0 ||
-    pointDistance(calibration.startPx, calibration.endPx) <= 1e-9 ||
-    !pointWithinSource(calibration.startPx, source) ||
-    !pointWithinSource(calibration.endPx, source)
+    draft.calibrationY !== undefined &&
+    !isValidCalibration(asRecord(draft.calibrationY))
   ) {
-    throw new Error(caseId + ' Ground Truth calibration 无效')
+    throw new Error(caseId + ' Ground Truth calibrationY 无效')
   }
 
   const assumptions = asRecord(draft.assumptions)

@@ -591,6 +591,7 @@ export class MetricStructuredFloorPlanExtractor
           heightPx,
         ],
         realDistanceMeters: calibrationMeters,
+        basis: 'structured',
       },
       assumptions: {
         wallThicknessMeters:
