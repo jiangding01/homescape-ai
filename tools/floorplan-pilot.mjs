@@ -1005,7 +1005,7 @@ function printHumanSummary(report) {
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2))
+  const args = parseArgs(process.argv.slice(process.argv[2] === '--' ? 3 : 2))
   const root = dirname(args.manifestPath)
   const experimentJson = await readJson(
     args.manifestPath,

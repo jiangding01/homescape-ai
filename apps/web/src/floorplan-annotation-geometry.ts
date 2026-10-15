@@ -32,10 +32,22 @@ export function zoomViewport(current: AnnotationViewport, factor: number, width:
   }, width, height)
 }
 
-export function orthogonalPoint(previous: PixelPoint, target: PixelPoint): PixelPoint {
-  return Math.abs(target[0] - previous[0]) >= Math.abs(target[1] - previous[1])
-    ? [target[0], previous[1]]
-    : [previous[0], target[1]]
+/**
+ * Snap target onto the horizontal/vertical line through previous. When an
+ * anchor (the polygon's first point) is given, the free coordinate also snaps
+ * to the anchor's axis within tolerance so the closing edge can be orthogonal.
+ */
+export function orthogonalPoint(
+  previous: PixelPoint,
+  target: PixelPoint,
+  anchor?: PixelPoint,
+  tolerance = 0,
+): PixelPoint {
+  const horizontal = Math.abs(target[0] - previous[0]) >= Math.abs(target[1] - previous[1])
+  const free = horizontal ? 0 : 1
+  const freeValue = anchor && Math.abs(target[free] - anchor[free]) <= tolerance
+    ? anchor[free] : target[free]
+  return horizontal ? [freeValue, previous[1]] : [previous[0], freeValue]
 }
 
 export const orthogonalEdge = (a: PixelPoint, b: PixelPoint) =>

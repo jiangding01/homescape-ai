@@ -60,7 +60,7 @@ function tagsOf(c) {
   }))
 }
 async function main() {
-  const args=process.argv.slice(2)
+  const args=process.argv.slice(process.argv[2] === '--' ? 3 : 2)
   const check=args.includes('--check')
   const filenames=args.filter(x=>x!=='--check')
   if (filenames.length!==1 || filenames[0].startsWith('-')) {
@@ -70,7 +70,7 @@ async function main() {
   const m=JSON.parse(await readLocal(root,basename(input),'Stage Manifest'))
   if (!obj(m) || m.schemaVersion!=='0.1.0' || typeof m.dataset!=='string' ||
       !m.dataset.trim() || !Array.isArray(m.cases) || !m.cases.length) fail('Stage Manifest 无效')
-  const seen=new Set(),approved=[],states=[]
+  const seen=new Set(),seenSources=new Set(),approved=[],states=[]
   for (const c of m.cases) {
     if (!obj(c) || typeof c.id!=='string' || !/^case-[a-z0-9_-]{1,48}$/.test(c.id) ||
         seen.has(c.id)) fail('Case ID 无效或重复')
@@ -78,6 +78,8 @@ async function main() {
     if (!['pending','approved'].includes(c.reviewStatus)) fail(c.id+' reviewStatus 无效')
     const source=await readLocal(root,c.sourcePath,c.id+'.sourcePath')
     if (!hex(c.sourceSha256) || hash(source)!==c.sourceSha256) fail(c.id+' 原图 SHA-256 不一致')
+    if (seenSources.has(c.sourceSha256)) fail(c.id+' 与其他 Case 使用了同一张原图')
+    seenSources.add(c.sourceSha256)
     const suffix=extname(c.sourcePath).toLowerCase()
     if (c.mediaType==='image/jpeg') {
       if (!['.jpg','.jpeg'].includes(suffix)||source[0]!==255||source[1]!==216||source[2]!==255) fail(c.id+' JPEG 文件格式无效')

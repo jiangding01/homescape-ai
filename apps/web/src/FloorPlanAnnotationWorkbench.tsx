@@ -717,6 +717,7 @@ export function FloorPlanAnnotationWorkbench({
   const sourceHeight = workingDraft.source.heightPx
   const visibleView = viewport ?? fullViewport(sourceWidth, sourceHeight)
   const zoom = sourceWidth / visibleView.width
+  const closeSnapTolerance = Math.max(3, 12 / zoom)
   const isPanning = panMode || optionHeld
   const zoomBy = (factor: number) => setViewport((old) =>
     zoomViewport(old ?? fullViewport(sourceWidth, sourceHeight), factor, sourceWidth, sourceHeight))
@@ -805,7 +806,8 @@ export function FloorPlanAnnotationWorkbench({
     if (drawingPoints !== null && !disabled) {
       const pointer = pointFromPointer(event)
       if (pointer) setCursorPoint(orthogonalMode && drawingPoints.length
-        ? orthogonalPoint(drawingPoints[drawingPoints.length - 1]!, pointer) : pointer)
+        ? orthogonalPoint(drawingPoints[drawingPoints.length - 1]!, pointer,
+          drawingPoints[0], closeSnapTolerance) : pointer)
     }
     if (!dragTarget || disabled) return
 
@@ -847,6 +849,9 @@ export function FloorPlanAnnotationWorkbench({
   }
 
   const resetAnnotation = () => {
+    if (!window.confirm('将丢弃当前全部校正，恢复到导入时的 Draft。确定继续？')) return
+    setViewport(null)
+    setSelectedVertexIndex(null)
     setDrawingPoints(null)
     setCursorPoint(null)
     setGeometryReviewed(false)
@@ -882,12 +887,15 @@ export function FloorPlanAnnotationWorkbench({
       openings: [],
     }))
     setSelectedRoomId('')
+    setSelectedVertexIndex(null)
     setDrawingPoints(null)
     setCursorPoint(null)
     setViewport(null)
     setGeometryReviewed(false)
     setTouchedRoomIds(new Set<string>())
-    recordEdit('resets')
+    // A blank annotation is a new case: its Review Burden starts from zero.
+    setEditCounts(initialEditCounts)
+    setStartedAt(Date.now())
     setAnnotationError('已开始空白标注：请逐房间描边，核对尺寸、墙厚和层高')
   }
 
@@ -925,6 +933,7 @@ export function FloorPlanAnnotationWorkbench({
       }],
     }))
     setSelectedRoomId(id)
+    setSelectedVertexIndex(null)
     setDrawingPoints(null)
     setCursorPoint(null)
     setGeometryReviewed(false)
@@ -1246,7 +1255,8 @@ export function FloorPlanAnnotationWorkbench({
                 return
               }
               const snapped = orthogonalMode && drawingPoints.length
-                ? orthogonalPoint(drawingPoints[drawingPoints.length - 1]!, point) : point
+                ? orthogonalPoint(drawingPoints[drawingPoints.length - 1]!, point,
+                  drawingPoints[0], closeSnapTolerance) : point
               setGeometryReviewed(false)
               setDrawingPoints((current) => current === null ? null :
                 [...current, [Math.round(snapped[0] * 100) / 100, Math.round(snapped[1] * 100) / 100]])

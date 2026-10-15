@@ -79,9 +79,30 @@ async function outputPath(root, target, name) {
   }
   return target
 }
+// EXIF Orientation from an APP1 segment; the extractor's decoder applies it.
+function exifOrientation(bytes, start, length) {
+  if (bytes.toString('ascii', start + 2, start + 8) !== 'Exif\0\0') return 1
+  const tiff = start + 8
+  const end = start + length
+  if (tiff + 8 > end) return 1
+  const order = bytes.toString('ascii', tiff, tiff + 2)
+  if (order !== 'II' && order !== 'MM') return 1
+  const u16 = (at) => order === 'II' ? bytes.readUInt16LE(at) : bytes.readUInt16BE(at)
+  const u32 = (at) => order === 'II' ? bytes.readUInt32LE(at) : bytes.readUInt32BE(at)
+  const ifd = tiff + u32(tiff + 4)
+  if (ifd + 2 > end) return 1
+  const count = u16(ifd)
+  for (let i = 0; i < count; i++) {
+    const entry = ifd + 2 + i * 12
+    if (entry + 12 > end) break
+    if (u16(entry) === 0x0112) return u16(entry + 8)
+  }
+  return 1
+}
 function jpegSize(bytes) {
   if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) fail('JPEG 文件头无效')
   let offset = 2
+  let orientation = 1
   while (offset < bytes.length) {
     if (bytes[offset] !== 0xff) fail('JPEG 段边界无效')
     while (bytes[offset] === 0xff) offset++
@@ -92,9 +113,13 @@ function jpegSize(bytes) {
     if (offset + 2 > bytes.length) break
     const length = bytes.readUInt16BE(offset)
     if (length < 2 || offset + length > bytes.length) fail('JPEG 段长度无效')
+    if (marker === 0xe1) orientation = exifOrientation(bytes, offset, length)
     if ([0xc0,0xc1,0xc2,0xc3,0xc5,0xc6,0xc7,0xc9,0xca,0xcb,0xcd,0xce,0xcf].includes(marker)) {
       if (length < 7) fail('JPEG 图像尺寸段无效')
-      return { width: bytes.readUInt16BE(offset + 5), height: bytes.readUInt16BE(offset + 3) }
+      const width = bytes.readUInt16BE(offset + 5)
+      const height = bytes.readUInt16BE(offset + 3)
+      // Orientations 5-8 rotate by 90°, so the decoded image has swapped sides.
+      return orientation >= 5 && orientation <= 8 ? { width: height, height: width } : { width, height }
     }
     offset += length
   }
@@ -130,7 +155,7 @@ function classifyExtractorError(output) {
   if (message.includes('Reconstruction') || message.includes('Reconstructor') || message.includes('重建')) return 'reconstruction_failure'
   return 'extractor_failed'
 }
-async function verifyArtifacts(source, candidatePath, metadataPath) {
+async function verifyArtifacts(source, candidatePath, metadataPath, root) {
   let candidateBytes, metadataBytes
   try {
     candidateBytes = await readFile(candidatePath)
@@ -162,8 +187,8 @@ async function verifyArtifacts(source, candidatePath, metadataPath) {
   return {
     candidateSha256: sha256(candidateBytes),
     metadataSha256: sha256(metadataBytes),
-    candidatePath: relative(dirname(dirname(source.filePath)), candidatePath).split(sep).join('/'),
-    metadataPath: relative(dirname(dirname(source.filePath)), metadataPath).split(sep).join('/'),
+    candidatePath: relative(root, candidatePath).split(sep).join('/'),
+    metadataPath: relative(root, metadataPath).split(sep).join('/'),
     roomCount: draft.rooms.length,
     openingCount: draft.openings.length,
     warningCount: recordValue.warnings?.length ?? 0,
@@ -171,7 +196,7 @@ async function verifyArtifacts(source, candidatePath, metadataPath) {
   }
 }
 async function main() {
-  const args = parseArgs(process.argv.slice(2))
+  const args = parseArgs(process.argv.slice(process.argv[2] === '--' ? 3 : 2))
   const root = dirname(args.manifest)
   const m = JSON.parse(await readFile(args.manifest, 'utf8'))
   if (!record(m) || m.schemaVersion !== '0.1.0' || typeof m.dataset !== 'string' || !m.dataset.trim() || !Array.isArray(m.cases) || m.cases.length === 0) fail('需要 Real Intake Manifest v0.1')
@@ -240,7 +265,7 @@ async function main() {
           : classifyExtractorError(result.stderr ?? result.error?.message)
       } else {
         try {
-          Object.assign(source, await verifyArtifacts(source, candidate, metadata))
+          Object.assign(source, await verifyArtifacts(source, candidate, metadata, root))
           // Only structural integrity was checked; Human Review is still mandatory.
           source.candidateStatus = 'generated_unverified'
         } catch {
@@ -255,6 +280,7 @@ async function main() {
     schemaVersion: '0.1.0',
     reportType: 'real_floorplan_intake_pre_ground_truth',
     dataset: m.dataset,
+    extractorId: EXTRACTOR_ID,
     sourceSetFingerprint: fingerprint,
     caseCount: sanitized.length,
     extractedCount: sanitized.filter((s) => s.candidateStatus === 'generated_unverified').length,

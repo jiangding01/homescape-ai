@@ -44,6 +44,8 @@ Intake 报告固定 `groundTruthCaseCount: 0`、`benchmarkReady: false`，输出
 
 只接受标准 PNG/JPEG 文件头及匹配扩展名。WebP 要先离线转为 PNG，转换前后各记录 SHA；不能直接把 .webp 更名为 .png。包含 ROI 的样本须设置 `geometryStage=floorplan_roi` 并记录 `roi` 几何变换；不要把 ROI 成果冒充 full-page 零预处理结果。
 
+`widthPx` / `heightPx` 填写按 EXIF 方向校正后的显示尺寸（与 Extractor 解码结果一致）；EXIF 方向为 5–8 的 JPEG 宽高与文件内存储尺寸互换。
+
 ## 使用
 
 ```bash

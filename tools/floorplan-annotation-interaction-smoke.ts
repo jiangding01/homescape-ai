@@ -4,6 +4,9 @@ import { clickNearStart, clampViewport, fullViewport, insertPolygonVertex, ortho
 
 assert.deepEqual(orthogonalPoint([100, 100], [220, 119]), [220, 100])
 assert.deepEqual(orthogonalPoint([100, 100], [116, 230]), [100, 230])
+// Closing corner snaps onto the first point's axis so the last edge is orthogonal.
+assert.deepEqual(orthogonalPoint([402, 300], [103, 298], [100, 100], 5), [100, 300])
+assert.deepEqual(orthogonalPoint([402, 300], [130, 298], [100, 100], 5), [130, 300])
 assert.equal(orthogonalEdge([100, 100], [150, 100]), true)
 assert.equal(orthogonalEdge([100, 100], [150, 125]), false)
 assert.equal(clickNearStart([100, 100], [105, 105], 2), true)

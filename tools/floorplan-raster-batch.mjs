@@ -364,7 +364,7 @@ async function readJson(path, label) {
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2))
+  const args = parseArgs(process.argv.slice(process.argv[2] === '--' ? 3 : 2))
   if (args.help) return
 
   const root = dirname(args.manifestPath)
@@ -563,6 +563,9 @@ async function main() {
     )
   }
 
+  // Manifest paths resolve against the manifest's own directory, not the corpus root.
+  const fromManifest = (manifestPath, target) =>
+    portableRelative(dirname(manifestPath), resolve(root, target))
   const benchmarkManifest = {
     schemaVersion: '0.1.0',
     dataset: manifest.dataset,
@@ -570,12 +573,12 @@ async function main() {
     thresholds: DEFAULT_BENCHMARK_THRESHOLDS,
     cases: outputs.map((item) => ({
       id: item.caseId,
-      sourcePath: item.sourcePath,
-      groundTruthPath: item.groundTruthPath,
+      sourcePath: fromManifest(benchmarkManifestPath, item.sourcePath),
+      groundTruthPath: fromManifest(benchmarkManifestPath, item.groundTruthPath),
       candidates: [
         {
           extractorId: args.extractorId,
-          candidatePath: item.candidatePath,
+          candidatePath: fromManifest(benchmarkManifestPath, item.candidatePath),
         },
       ],
     })),
@@ -585,15 +588,15 @@ async function main() {
     schemaVersion: '0.1.0',
     dataset: manifest.dataset,
     datasetFingerprint: corpusSummary.datasetFingerprint,
-    corpusManifestPath: portableRelative(root, args.manifestPath),
-    corpusSummaryPath: portableRelative(root, corpusReportPath),
-    benchmarkReportPath: portableRelative(root, benchmarkReportPath),
+    corpusManifestPath: portableRelative(dirname(experimentManifestPath), args.manifestPath),
+    corpusSummaryPath: portableRelative(dirname(experimentManifestPath), corpusReportPath),
+    benchmarkReportPath: portableRelative(dirname(experimentManifestPath), benchmarkReportPath),
     runs: outputs.map((item) => ({
       caseId: item.caseId,
       extractorId: args.extractorId,
-      candidatePath: item.candidatePath,
-      extractionMetadataPath: item.extractionMetadataPath,
-      reviewBurdenPath: item.reviewBurdenPath,
+      candidatePath: fromManifest(experimentManifestPath, item.candidatePath),
+      extractionMetadataPath: fromManifest(experimentManifestPath, item.extractionMetadataPath),
+      reviewBurdenPath: fromManifest(experimentManifestPath, item.reviewBurdenPath),
     })),
   }
 

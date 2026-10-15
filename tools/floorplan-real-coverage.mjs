@@ -78,7 +78,7 @@ function checkIntake(value) {
 }
 
 async function main() {
-  const options = parseArgs(process.argv.slice(2))
+  const options = parseArgs(process.argv.slice(process.argv[2] === '--' ? 3 : 2))
   const corpusBytes = await readFile(options.corpusPath)
   const corpus = JSON.parse(corpusBytes.toString('utf8'))
   const corpusCases = checkCorpus(corpus)
@@ -86,6 +86,11 @@ async function main() {
 
   for (const intakePath of options.intakePaths) {
     const intake = JSON.parse(await readFile(intakePath, 'utf8'))
+    // Older Intake reports predate the extractorId field; when present it must match.
+    if (object(intake) && intake.extractorId !== undefined &&
+        intake.extractorId !== options.extractorId) {
+      fail('Intake Report 的 extractorId 与 --extractor-id 不一致：' + String(intake.extractorId))
+    }
     const entries = checkIntake(intake)
     for (const entry of entries) {
       if (!object(entry) || typeof entry.id !== 'string' || !entry.id ||

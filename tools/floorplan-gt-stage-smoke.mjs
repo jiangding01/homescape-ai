@@ -7,6 +7,7 @@ import { join } from 'node:path'
 const sha=x=>createHash('sha256').update(x).digest('hex')
 const root=await mkdtemp(join(tmpdir(),'homescape-gt-stage-'))
 const data=Buffer.from([255,216,255,1,2,3])
+const data2=Buffer.from([255,216,255,4,5,6])
 const gt=JSON.stringify({schemaVersion:'0.1.0',source:{kind:'floorplan_image',
   sourceLabel:'case-001'},rooms:[{}],openings:[]})
 const tags={quality:'clean',geometry:'irregular',annotation:'partial_dimension',
@@ -15,7 +16,7 @@ const manifest={schemaVersion:'0.1.0',dataset:'pilot-test',cases:[
   {id:'case-001',sourcePath:'sources/case-001.jpg',sourceSha256:sha(data),
     mediaType:'image/jpeg',groundTruthPath:'ground-truth/case-001.json',
     reviewStatus:'approved',approvedGroundTruthSha256:sha(gt),tagsReviewed:true,tags},
-  {id:'case-002',sourcePath:'sources/case-002.jpg',sourceSha256:sha(data),
+  {id:'case-002',sourcePath:'sources/case-002.jpg',sourceSha256:sha(data2),
     mediaType:'image/jpeg',groundTruthPath:'ground-truth/case-002.json',
     reviewStatus:'pending',tagsReviewed:false},
 ]}
@@ -27,7 +28,7 @@ try {
   await mkdir(join(root,'sources'))
   await mkdir(join(root,'ground-truth'))
   await writeFile(join(root,'sources/case-001.jpg'),data)
-  await writeFile(join(root,'sources/case-002.jpg'),data)
+  await writeFile(join(root,'sources/case-002.jpg'),data2)
   await writeFile(join(root,'ground-truth/case-001.json'),gt)
   await save()
   let result=run()
@@ -49,6 +50,9 @@ try {
   manifest.cases[0].sourcePath='sources/case-001.jpg'
   manifest.cases[1].id='case-001';await save();bad(/重复/)
   manifest.cases[1].id='case-002';await save()
+  manifest.cases[1].sourcePath='sources/case-001.jpg';manifest.cases[1].sourceSha256=sha(data)
+  await save();bad(/同一张原图/)
+  manifest.cases[1].sourcePath='sources/case-002.jpg';manifest.cases[1].sourceSha256=sha(data2);await save()
   result=run();assert.equal(result.status,0,result.stderr)
   result=run();assert.equal(result.status,0,result.stderr)
   process.stdout.write('Real GT staging smoke passed\n')
